@@ -22,6 +22,11 @@ export default function VideoPlayer() {
   const [undoCount, setUndoCount] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [showSpeedSubmenu, setShowSpeedSubmenu] = useState(false);
+  const [volume, setVolume] = useState(1); // 0-1 volume level
+  const settingsMenuRef = useRef<HTMLDivElement>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastXRef = useRef(0);
   const lastYRef = useRef(0);
@@ -37,6 +42,7 @@ export default function VideoPlayer() {
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
+      setPlaybackSpeed(1);
       // Reset undo stack and clear canvas when new video is loaded
       undoStack.current = [];
       setUndoCount(0);
@@ -285,6 +291,12 @@ export default function VideoPlayer() {
     recorder.start();
     setIsRecording(true);
 
+    // Start playing when recording starts
+    if (videoRef.current) {
+      videoRef.current.play();
+      setIsPlaying(true);
+    }
+
     let frameId: number;
     const drawFrame = () => {
       if (ctx && videoRef.current && canvasRef.current) {
@@ -307,6 +319,31 @@ export default function VideoPlayer() {
       setIsRecording(false);
     }, 10000);
   };
+
+  // Handle playback speed change
+  const handleSpeedChange = (speed: number) => {
+    setPlaybackSpeed(speed);
+    if (videoRef.current) {
+      videoRef.current.playbackRate = speed;
+    }
+  };
+
+  // Handle click outside settings menu
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        settingsMenuRef.current &&
+        !settingsMenuRef.current.contains(e.target as Node)
+      ) {
+        setShowSettingsMenu(false);
+        setShowSpeedSubmenu(false);
+      }
+    };
+    if (showSettingsMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showSettingsMenu]);
 
   // Handle keyboard controls
   useEffect(() => {
@@ -445,6 +482,15 @@ export default function VideoPlayer() {
     const seconds = Math.floor(time % 60);
     return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
   };
+
+  // clear download link after 10 seconds
+  useEffect(() => {
+    if (!recordingUrl) return;
+    const timer = setTimeout(() => {
+      setRecordingUrl(null);
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [recordingUrl]);
 
   return (
     <div className="w-full min-h-screen bg-black flex items-center justify-center">
@@ -596,7 +642,7 @@ export default function VideoPlayer() {
               showControls ? "opacity-100" : "opacity-0 pointer-events-none"
             }`}
           >
-            <div className="bg-gradient-to-t from-black/80 to-transparent p-6 space-y-4">
+            <div className="bg-gradient-to-t from-black/80 to-transparent p-6 space-y-4 relative">
               {/* Progress Bar */}
               <div className="space-y-2">
                 <input
@@ -623,83 +669,154 @@ export default function VideoPlayer() {
               </div>
 
               {/* Control Buttons */}
-              <div className="flex gap-4 items-center justify-center">
-                {/* Skip Back 5s */}
-                <button
-                  onClick={() => {
-                    if (videoRef.current) {
-                      videoRef.current.currentTime = Math.max(
-                        videoRef.current.currentTime - 5,
-                        0,
-                      );
-                    }
-                  }}
-                  className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-800 transition text-sm"
-                >
-                  ⬅ -5s
-                </button>
+              <div className="flex justify-between items-center relative">
+                {/* Volume on left */}
+                <div className="flex items-center gap-2">
+                  <span className="text-white text-sm">🔊</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={volume}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      setVolume(v);
+                      if (videoRef.current) {
+                        videoRef.current.volume = v;
+                      }
+                    }}
+                    className="w-32 h-1 appearance-none cursor-pointer"
+                    style={{
+                      background: `linear-gradient(to right, #3b82f6 ${volume * 100}%, #64748b ${volume * 100}%)`,
+                    }}
+                  />
+                </div>
 
-                {/* Skip Back 1s */}
-                <button
-                  onClick={() => {
-                    if (videoRef.current) {
-                      videoRef.current.currentTime = Math.max(
-                        videoRef.current.currentTime - 1,
-                        0,
-                      );
-                    }
-                  }}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg font-bold hover:bg-gray-700 transition text-base"
-                >
-                  ⬅ -1s
-                </button>
+                {/* Center controls group */}
+                <div className="flex gap-4 items-center">
+                  <button
+                    onClick={() => {
+                      if (videoRef.current) {
+                        videoRef.current.currentTime = Math.max(
+                          videoRef.current.currentTime - 5,
+                          0,
+                        );
+                      }
+                    }}
+                    className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-800 transition text-sm"
+                  >
+                    &lt;&lt;
+                  </button>
 
-                {/* Play/Pause */}
-                <button
-                  onClick={togglePlayPause}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition text-base"
-                >
-                  {isPlaying ? "⏸ Pause" : "▶ Play"}
-                </button>
+                  <button
+                    onClick={() => {
+                      if (videoRef.current) {
+                        videoRef.current.currentTime = Math.max(
+                          videoRef.current.currentTime - 1,
+                          0,
+                        );
+                      }
+                    }}
+                    className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-800 transition text-sm"
+                  >
+                    &lt;
+                  </button>
 
-                {/* Skip Forward 1s */}
-                <button
-                  onClick={() => {
-                    if (videoRef.current) {
-                      videoRef.current.currentTime = Math.min(
-                        videoRef.current.currentTime + 1,
-                        videoRef.current.duration || 0,
-                      );
-                    }
-                  }}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg font-bold hover:bg-gray-700 transition text-base"
-                >
-                  +1s ➡
-                </button>
+                  <button
+                    onClick={togglePlayPause}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition text-sm"
+                  >
+                    {isPlaying ? "⏸ Pause" : "▶ Play"}
+                  </button>
 
-                {/* Skip Forward 5s */}
-                <button
-                  onClick={() => {
-                    if (videoRef.current) {
-                      videoRef.current.currentTime = Math.min(
-                        videoRef.current.currentTime + 5,
-                        videoRef.current.duration || 0,
-                      );
-                    }
-                  }}
-                  className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-800 transition text-sm"
-                >
-                  +5s ➡
-                </button>
+                  <button
+                    onClick={() => {
+                      if (videoRef.current) {
+                        videoRef.current.currentTime = Math.min(
+                          videoRef.current.currentTime + 1,
+                          videoRef.current.duration || 0,
+                        );
+                      }
+                    }}
+                    className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-800 transition text-sm"
+                  >
+                    &gt;
+                  </button>
 
-                {/* Record 10s clip */}
-                <button
-                  onClick={startRecording}
-                  disabled={isRecording}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition text-sm disabled:opacity-50"
-                >
-                  {isRecording ? "🔴 Recording..." : "🔴 Record 10s"}
-                </button>
+                  <button
+                    onClick={() => {
+                      if (videoRef.current) {
+                        videoRef.current.currentTime = Math.min(
+                          videoRef.current.currentTime + 5,
+                          videoRef.current.duration || 0,
+                        );
+                      }
+                    }}
+                    className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-800 transition text-sm"
+                  >
+                    &gt;&gt;
+                  </button>
+
+                  <button
+                    onClick={startRecording}
+                    disabled={isRecording}
+                    className={`px-4 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition text-sm ${
+                      isRecording ? "animate-pulse" : ""
+                    } disabled:opacity-50`}
+                  >
+                    🔴
+                  </button>
+                </div>
+
+                {/* Gear on right */}
+                <div ref={settingsMenuRef} className="relative">
+                  <button
+                    onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+                    className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-600 transition text-sm"
+                    title="Settings"
+                  >
+                    ⚙️
+                  </button>
+                  {showSettingsMenu && (
+                    <div className="absolute bottom-full right-0 mb-1 bg-gray-800 rounded-lg shadow-lg border border-gray-700 min-w-max">
+                      {/* Speed Option */}
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowSpeedSubmenu(!showSpeedSubmenu)}
+                          className="w-full px-4 py-2 text-left text-white hover:bg-gray-700 transition flex items-center justify-between"
+                        >
+                          <span>Speed</span>
+                          <span className="ml-2">▶</span>
+                        </button>
+                        {/* Speed Submenu Items */}
+                        {showSpeedSubmenu && (
+                          <div className="absolute right-full top-1/2 -translate-y-1/2 bg-gray-800 rounded-lg shadow-lg border border-gray-700 flex flex-col mr-1">
+                            {[0.25, 0.5, 0.75, 1, 1.5, 2].map((speed) => (
+                              <button
+                                key={speed}
+                                onClick={() => {
+                                  handleSpeedChange(speed);
+                                  setShowSettingsMenu(false);
+                                  setShowSpeedSubmenu(false);
+                                }}
+                                className={`px-3 py-1 text-xs transition ${
+                                  playbackSpeed === speed
+                                    ? "bg-blue-600 text-white"
+                                    : "text-gray-200 hover:bg-gray-700"
+                                } ${speed === 0.25 ? "rounded-tl-lg" : ""} ${
+                                  speed === 2 ? "rounded-bl-lg" : ""
+                                }`}
+                              >
+                                {speed}x
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
