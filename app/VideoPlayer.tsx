@@ -1,6 +1,23 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile, toBlobURL } from "@ffmpeg/util";
+
+const RECORDING_FORMATS = [
+  "video/mp4;codecs=h264,aac",
+  "video/mp4",
+  "video/webm;codecs=vp9,opus",
+  "video/webm",
+] as const;
+
+const FFMPEG_BASE_URL =
+  "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd";
+const MAX_RECORDING_WIDTH = 854;
+const TARGET_FPS = 24;
+const TARGET_VIDEO_BITRATE = "900k";
+const TARGET_MAXRATE = "1200k";
+const TARGET_BUFSIZE = "2400k";
 
 export default function VideoPlayer() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -21,7 +38,11 @@ export default function VideoPlayer() {
   const [isArrowMode, setIsArrowMode] = useState(false);
   const [undoCount, setUndoCount] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
+  const [recordingMessage, setRecordingMessage] = useState<string | null>(null);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [recordingFilename, setRecordingFilename] = useState("recording.mp4");
+  const [exportFormat, setExportFormat] = useState<"mp4" | "avi">("mp4");
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showSpeedSubmenu, setShowSpeedSubmenu] = useState(false);
@@ -32,6 +53,67 @@ export default function VideoPlayer() {
   const lastYRef = useRef(0);
   const undoStack = useRef<string[]>([]);
   const recordCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const ffmpegRef = useRef<FFmpeg | null>(null);
+
+  const loadFfmpeg = async () => {
+    if (ffmpegRef.current) return ffmpegRef.current;
+    const ffmpeg = new FFmpeg();
+    await ffmpeg.load({
+      coreURL: await toBlobURL(
+        `${FFMPEG_BASE_URL}/ffmpeg-core.js`,
+        "text/javascript",
+      ),
+      wasmURL: await toBlobURL(
+        `${FFMPEG_BASE_URL}/ffmpeg-core.wasm`,
+        "application/wasm",
+      ),
+      workerURL: await toBlobURL(
+        `${FFMPEG_BASE_URL}/ffmpeg-core.worker.js`,
+        "text/javascript",
+      ),
+    });
+    ffmpegRef.current = ffmpeg;
+    return ffmpeg;
+  };
+
+  const convertToVideo = async (sourceBlob: Blob, format: "mp4" | "avi") => {
+    const ffmpeg = await loadFfmpeg();
+    const inputFile = "input.bin";
+    const outputFile = `output.${format}`;
+
+    await ffmpeg.writeFile(inputFile, await fetchFile(sourceBlob));
+    const baseArgs = [
+      "-i",
+      inputFile,
+      "-r",
+      String(TARGET_FPS),
+      "-c:v",
+      "mpeg4",
+      "-b:v",
+      TARGET_VIDEO_BITRATE,
+      "-maxrate",
+      TARGET_MAXRATE,
+      "-bufsize",
+      TARGET_BUFSIZE,
+      "-pix_fmt",
+      "yuv420p",
+    ];
+    const command =
+      format === "mp4"
+        ? [...baseArgs, "-movflags", "+faststart", outputFile]
+        : [...baseArgs, outputFile];
+    await ffmpeg.exec(command);
+
+    const outputData = await ffmpeg.readFile(outputFile);
+    await ffmpeg.deleteFile(inputFile);
+    await ffmpeg.deleteFile(outputFile);
+    const sourceBytes = outputData as Uint8Array;
+    const safeBytes = new Uint8Array(sourceBytes.byteLength);
+    safeBytes.set(sourceBytes);
+    return new Blob([safeBytes], {
+      type: format === "mp4" ? "video/mp4" : "video/x-msvideo",
+    });
+  };
 
   // Handle video file upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -261,28 +343,77 @@ export default function VideoPlayer() {
     const recordCanvas = recordCanvasRef.current;
     if (!recordCanvas) return;
 
-    recordCanvas.width = canvasRef.current.width;
-    recordCanvas.height = canvasRef.current.height;
+    const sourceWidth = canvasRef.current.width;
+    const sourceHeight = canvasRef.current.height;
+    const scaleFactor =
+      sourceWidth > MAX_RECORDING_WIDTH ? MAX_RECORDING_WIDTH / sourceWidth : 1;
+    const scaledWidth = Math.max(
+      2,
+      Math.floor((sourceWidth * scaleFactor) / 2) * 2,
+    );
+    const scaledHeight = Math.max(
+      2,
+      Math.floor((sourceHeight * scaleFactor) / 2) * 2,
+    );
+    recordCanvas.width = scaledWidth;
+    recordCanvas.height = scaledHeight;
 
     const ctx = recordCanvas.getContext("2d");
     if (!ctx) return;
 
-    const stream = recordCanvas.captureStream(30);
-    const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+    const stream = recordCanvas.captureStream(TARGET_FPS);
+    const supportedMimeType = RECORDING_FORMATS.find((mimeType) =>
+      MediaRecorder.isTypeSupported(mimeType),
+    );
+    const recorder = supportedMimeType
+      ? new MediaRecorder(stream, { mimeType: supportedMimeType })
+      : new MediaRecorder(stream);
     const chunks: Blob[] = [];
 
     recorder.ondataavailable = (e) => {
       if (e.data.size) chunks.push(e.data);
     };
 
-    recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: "video/webm" });
-      const url = URL.createObjectURL(blob);
+    recorder.onstop = async () => {
+      let finalBlob = new Blob(chunks, {
+        type: supportedMimeType || recorder.mimeType || "video/webm",
+      });
+      let finalFilename = "recording.webm";
+
+      try {
+        setIsConverting(true);
+        const targetLabel = exportFormat.toUpperCase();
+        setRecordingMessage(`Comprimiendo y convirtiendo a ${targetLabel}...`);
+        finalBlob = await convertToVideo(finalBlob, exportFormat);
+        finalFilename = `recording.${exportFormat}`;
+        setRecordingMessage(`${targetLabel} comprimido listo para descargar.`);
+      } catch (targetError) {
+        console.error(`Error converting to ${exportFormat}`, targetError);
+        const fallbackFormat = exportFormat === "mp4" ? "avi" : "mp4";
+        try {
+          setRecordingMessage(
+            `${exportFormat.toUpperCase()} fallo. Convirtiendo a ${fallbackFormat.toUpperCase()}...`,
+          );
+          finalBlob = await convertToVideo(finalBlob, fallbackFormat);
+          finalFilename = `recording.${fallbackFormat}`;
+          setRecordingMessage(
+            `${fallbackFormat.toUpperCase()} comprimido listo para descargar.`,
+          );
+        } catch (fallbackError) {
+          console.error(`Error converting to ${fallbackFormat}`, fallbackError);
+          setRecordingMessage("No se pudo convertir. Se descarga en WEBM.");
+        }
+      } finally {
+        setIsConverting(false);
+      }
+
+      const url = URL.createObjectURL(finalBlob);
       setRecordingUrl(url);
+      setRecordingFilename(finalFilename);
       // auto download
       const a = document.createElement("a");
       a.href = url;
-      a.download = "recording.webm";
+      a.download = finalFilename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -307,7 +438,14 @@ export default function VideoPlayer() {
           recordCanvas.width,
           recordCanvas.height,
         );
-        ctx.drawImage(canvasRef.current, 0, 0);
+        // Scale drawing overlay to the same output size as the recorded frame.
+        ctx.drawImage(
+          canvasRef.current,
+          0,
+          0,
+          recordCanvas.width,
+          recordCanvas.height,
+        );
       }
       frameId = requestAnimationFrame(drawFrame);
     };
@@ -686,7 +824,7 @@ export default function VideoPlayer() {
                         videoRef.current.volume = v;
                       }
                     }}
-                    className="w-32 h-1 appearance-none cursor-pointer"
+                    className="volume-slider w-32 h-1 appearance-none cursor-pointer"
                     style={{
                       background: `linear-gradient(to right, #3b82f6 ${volume * 100}%, #64748b ${volume * 100}%)`,
                     }}
@@ -695,6 +833,19 @@ export default function VideoPlayer() {
 
                 {/* Center controls group */}
                 <div className="flex gap-4 items-center">
+                  <select
+                    value={exportFormat}
+                    onChange={(e) =>
+                      setExportFormat(e.target.value as "mp4" | "avi")
+                    }
+                    disabled={isRecording || isConverting}
+                    className="px-3 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-600 transition text-sm disabled:opacity-50"
+                    title="Formato de descarga"
+                  >
+                    <option value="mp4">MP4</option>
+                    <option value="avi">AVI</option>
+                  </select>
+
                   <button
                     onClick={() => {
                       if (videoRef.current) {
@@ -760,12 +911,12 @@ export default function VideoPlayer() {
 
                   <button
                     onClick={startRecording}
-                    disabled={isRecording}
+                    disabled={isRecording || isConverting}
                     className={`px-4 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition text-sm ${
                       isRecording ? "animate-pulse" : ""
                     } disabled:opacity-50`}
                   >
-                    🔴
+                    {isConverting ? "⏳" : "🔴"}
                   </button>
                 </div>
 
@@ -825,13 +976,40 @@ export default function VideoPlayer() {
             <div className="absolute bottom-20 left-0 right-0 flex justify-center z-20">
               <a
                 href={recordingUrl}
-                download="recording.webm"
+                download={recordingFilename}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition"
               >
                 💾 Download clip
               </a>
             </div>
           )}
+          {recordingMessage && (
+            <div className="absolute bottom-32 left-0 right-0 flex justify-center z-20">
+              <div className="px-3 py-1.5 bg-black/70 text-white text-sm rounded-md">
+                {recordingMessage}
+              </div>
+            </div>
+          )}
+          {/* custom slider thumb sizing */}
+          <style jsx>{`
+            .volume-slider::-webkit-slider-thumb {
+              width: 8px;
+              height: 8px;
+              background: #fff;
+              border: 1px solid #3b82f6;
+              border-radius: 50%;
+              cursor: pointer;
+              margin-top: -3px; /* center thumb on track */
+            }
+            .volume-slider::-moz-range-thumb {
+              width: 8px;
+              height: 8px;
+              background: #fff;
+              border: 1px solid #3b82f6;
+              border-radius: 50%;
+              cursor: pointer;
+            }
+          `}</style>
         </div>
       )}
     </div>
