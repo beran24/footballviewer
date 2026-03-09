@@ -555,6 +555,18 @@ export default function VideoPlayer() {
   // Handle keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Tab") {
+        // Use Tab as a quick drawing toggle while the player is open.
+        if (videoSrc || youtubeEmbedUrl) {
+          e.preventDefault();
+          if (!e.repeat) {
+            setDrawingEnabled((prev) => !prev);
+            setShowControls(true);
+          }
+        }
+        return;
+      }
+
       if (e.key === "Delete") {
         e.preventDefault();
         clearCanvas();
@@ -603,8 +615,10 @@ export default function VideoPlayer() {
     };
 
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isPlaying]);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isPlaying, videoSrc, youtubeEmbedUrl]);
 
   // Undo helper (pops last state and draws it)
   const handleUndo = () => {
@@ -830,13 +844,16 @@ export default function VideoPlayer() {
             <div className="bg-gradient-to-b from-black/60 to-transparent p-6 flex justify-center gap-4 flex-wrap">
               <button
                 onClick={() => setDrawingEnabled(!drawingEnabled)}
+                title="Toggle drawing (Tab)"
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
                   drawingEnabled
                     ? "bg-red-600 text-white hover:bg-red-700"
                     : "bg-gray-600 text-white hover:bg-gray-700"
                 }`}
               >
-                {drawingEnabled ? "✏️ Drawing ON" : "✏️ Drawing OFF"}
+                {drawingEnabled
+                  ? "✏️ Drawing ON (Tab)"
+                  : "✏️ Drawing OFF (Tab)"}
               </button>
 
               {drawingEnabled && (
