@@ -21,6 +21,7 @@ const TARGET_BUFSIZE = "2400k";
 
 export default function VideoPlayer() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const youtubeIframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -107,8 +108,19 @@ export default function VideoPlayer() {
     setVideoSrc("");
     setCurrentTime(0);
     setDuration(0);
-    setIsPlaying(false);
-    setYoutubeEmbedUrl(`https://www.youtube.com/embed/${videoId}?autoplay=1`);
+    setIsPlaying(true);
+    const params = new URLSearchParams({
+      autoplay: "1",
+      enablejsapi: "1",
+      playsinline: "1",
+      rel: "0",
+    });
+    if (typeof window !== "undefined") {
+      params.set("origin", window.location.origin);
+    }
+    setYoutubeEmbedUrl(
+      `https://www.youtube.com/embed/${videoId}?${params.toString()}`,
+    );
 
     // Reset drawing state to avoid stale UI when switching sources.
     setDrawingEnabled(false);
@@ -390,6 +402,20 @@ export default function VideoPlayer() {
         videoRef.current.play();
         setIsPlaying(true);
       }
+      return;
+    }
+
+    if (youtubeEmbedUrl && youtubeIframeRef.current) {
+      const command = isPlaying ? "pauseVideo" : "playVideo";
+      youtubeIframeRef.current.contentWindow?.postMessage(
+        JSON.stringify({
+          event: "command",
+          func: command,
+          args: [],
+        }),
+        "*",
+      );
+      setIsPlaying((prev) => !prev);
     }
   };
 
@@ -555,6 +581,16 @@ export default function VideoPlayer() {
   // Handle keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
       if (e.key === "Tab") {
         // Use Tab as a quick drawing toggle while the player is open.
         if (videoSrc || youtubeEmbedUrl) {
@@ -573,9 +609,10 @@ export default function VideoPlayer() {
         return;
       }
 
-      if (!videoRef.current) return;
+      if (!videoRef.current && !youtubeEmbedUrl) return;
 
       if (e.key === "ArrowRight") {
+        if (!videoRef.current) return;
         e.preventDefault();
         if (e.ctrlKey) {
           // Control + Right: +5 seconds
@@ -592,6 +629,7 @@ export default function VideoPlayer() {
         }
         setShowControls(true);
       } else if (e.key === "ArrowLeft") {
+        if (!videoRef.current) return;
         e.preventDefault();
         if (e.ctrlKey) {
           // Control + Left: -5 seconds
@@ -792,6 +830,7 @@ export default function VideoPlayer() {
             />
           ) : (
             <iframe
+              ref={youtubeIframeRef}
               src={youtubeEmbedUrl || ""}
               className="w-full h-full"
               allow="autoplay; encrypted-media; picture-in-picture"
