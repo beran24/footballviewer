@@ -47,6 +47,9 @@ export default function VideoPlayer() {
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [showSpeedSubmenu, setShowSpeedSubmenu] = useState(false);
   const [volume, setVolume] = useState(1); // 0-1 volume level
+  const [youtubeInput, setYoutubeInput] = useState("");
+  const [youtubeEmbedUrl, setYoutubeEmbedUrl] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastXRef = useRef(0);
@@ -54,6 +57,67 @@ export default function VideoPlayer() {
   const undoStack = useRef<string[]>([]);
   const recordCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const ffmpegRef = useRef<FFmpeg | null>(null);
+
+  const extractYouTubeVideoId = (url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) return null;
+
+    // Allow direct video id input (11 chars).
+    if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) {
+      return trimmed;
+    }
+
+    try {
+      const parsed = new URL(trimmed);
+      const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+
+      if (host === "youtu.be") {
+        const id = parsed.pathname.split("/").filter(Boolean)[0];
+        return id && /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+      }
+
+      if (host === "youtube.com" || host === "m.youtube.com") {
+        const watchId = parsed.searchParams.get("v");
+        if (watchId && /^[a-zA-Z0-9_-]{11}$/.test(watchId)) return watchId;
+
+        const segments = parsed.pathname.split("/").filter(Boolean);
+        const markerIndex = segments.findIndex(
+          (segment) => segment === "embed" || segment === "shorts",
+        );
+        if (markerIndex >= 0) {
+          const id = segments[markerIndex + 1];
+          return id && /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+        }
+      }
+    } catch {
+      return null;
+    }
+
+    return null;
+  };
+
+  const handleYouTubeLoad = () => {
+    const videoId = extractYouTubeVideoId(youtubeInput);
+    if (!videoId) {
+      setUploadError("Link de YouTube no valido. Pega una URL correcta.");
+      return;
+    }
+
+    setUploadError(null);
+    setVideoSrc("");
+    setCurrentTime(0);
+    setDuration(0);
+    setIsPlaying(false);
+    setYoutubeEmbedUrl(`https://www.youtube.com/embed/${videoId}?autoplay=1`);
+
+    // Reset drawing state to avoid stale UI when switching sources.
+    setDrawingEnabled(false);
+    undoStack.current = [];
+    setUndoCount(0);
+    setTimeout(() => {
+      clearCanvas();
+    }, 100);
+  };
 
   const loadFfmpeg = async () => {
     if (ffmpegRef.current) return ffmpegRef.current;
@@ -120,6 +184,8 @@ export default function VideoPlayer() {
     const file = e.target.files?.[0];
     if (file && file.type.startsWith("video/")) {
       const url = URL.createObjectURL(file);
+      setYoutubeEmbedUrl(null);
+      setUploadError(null);
       setVideoSrc(url);
       setIsPlaying(false);
       setCurrentTime(0);
@@ -136,17 +202,20 @@ export default function VideoPlayer() {
 
   // Initialize canvas when video is loaded
   useEffect(() => {
-    if (!videoRef.current || !canvasRef.current) return;
+    if (!canvasRef.current) return;
 
     const resizeCanvas = () => {
-      const video = videoRef.current;
       const canvas = canvasRef.current;
-      if (video && canvas) {
-        // Use getBoundingClientRect to get actual display dimensions
-        const rect = video.getBoundingClientRect();
-        canvas.width = rect.width;
-        canvas.height = rect.height;
-      }
+      const video = videoRef.current;
+      const container = containerRef.current;
+      if (!canvas) return;
+
+      // For local files, match the rendered <video>. For YouTube iframe, match container.
+      const rect =
+        video?.getBoundingClientRect() || container?.getBoundingClientRect();
+      if (!rect) return;
+      canvas.width = rect.width;
+      canvas.height = rect.height;
     };
 
     // Resize on load and after a small delay
@@ -169,7 +238,7 @@ export default function VideoPlayer() {
       window.removeEventListener("resize", resizeCanvas);
       clearTimeout(timeoutId);
     };
-  }, [videoSrc]);
+  }, [videoSrc, youtubeEmbedUrl]);
 
   // Save current canvas state for undo
   const pushUndo = () => {
@@ -633,7 +702,7 @@ export default function VideoPlayer() {
   return (
     <div className="w-full min-h-screen bg-black flex items-center justify-center">
       {/* Upload Section */}
-      {!videoSrc && (
+      {!videoSrc && !youtubeEmbedUrl && (
         <div className="w-full max-w-2xl mx-auto p-6">
           <div className="bg-white rounded-lg shadow-lg p-8">
             <h1 className="text-3xl font-bold mb-6 text-gray-800">
@@ -660,12 +729,36 @@ export default function VideoPlayer() {
             <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center text-gray-500">
               <p className="text-lg">Upload a video file to get started</p>
             </div>
+
+            <div className="mt-6 border-t border-gray-200 pt-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                O pega un link de YouTube
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={youtubeInput}
+                  onChange={(e) => setYoutubeInput(e.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-blue-500 focus:outline-none"
+                />
+                <button
+                  onClick={handleYouTubeLoad}
+                  className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-semibold hover:bg-red-700 transition"
+                >
+                  Cargar
+                </button>
+              </div>
+              {uploadError && (
+                <p className="mt-2 text-sm text-red-600">{uploadError}</p>
+              )}
+            </div>
           </div>
         </div>
       )}
 
       {/* Video Player - Fullscreen */}
-      {videoSrc && (
+      {(videoSrc || youtubeEmbedUrl) && (
         <div
           ref={containerRef}
           className="w-full h-screen relative bg-black group"
@@ -675,13 +768,23 @@ export default function VideoPlayer() {
           }}
         >
           {/* Video Element */}
-          <video
-            ref={videoRef}
-            src={videoSrc}
-            className="w-full h-full object-contain cursor-pointer"
-            onClick={togglePlayPause}
-            crossOrigin="anonymous"
-          />
+          {videoSrc ? (
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              className="w-full h-full object-contain cursor-pointer"
+              onClick={togglePlayPause}
+              crossOrigin="anonymous"
+            />
+          ) : (
+            <iframe
+              src={youtubeEmbedUrl || ""}
+              className="w-full h-full"
+              allow="autoplay; encrypted-media; picture-in-picture"
+              allowFullScreen
+              title="YouTube player"
+            />
+          )}
 
           {/* Drawing Canvas */}
           <canvas
@@ -696,7 +799,7 @@ export default function VideoPlayer() {
             style={{ top: 0, left: 0 }}
           />
           {/* Hidden canvas used for recording video + annotations */}
-          <canvas ref={recordCanvasRef} className="hidden" />
+          {videoSrc && <canvas ref={recordCanvasRef} className="hidden" />}
 
           {/* Top Controls */}
           <div
@@ -710,6 +813,8 @@ export default function VideoPlayer() {
               <button
                 onClick={() => {
                   setVideoSrc("");
+                  setYoutubeEmbedUrl(null);
+                  setYoutubeInput("");
                   setCurrentTime(0);
                   setDuration(0);
                   clearCanvas();
@@ -722,7 +827,7 @@ export default function VideoPlayer() {
                 ✕
               </button>
             </div>
-            <div className="bg-gradient-to-b from-black/60 to-transparent p-6 flex justify-center gap-4">
+            <div className="bg-gradient-to-b from-black/60 to-transparent p-6 flex justify-center gap-4 flex-wrap">
               <button
                 onClick={() => setDrawingEnabled(!drawingEnabled)}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
@@ -771,208 +876,220 @@ export default function VideoPlayer() {
                   </button>
                 </>
               )}
+
+              {!videoSrc && (
+                <div className="text-white text-sm self-center">
+                  Modo YouTube: puedes dibujar encima, pero no grabar/exportar.
+                </div>
+              )}
             </div>
           </div>
 
           {/* Bottom Controls */}
-          <div
-            className={`absolute bottom-0 left-0 right-0 transition-opacity duration-300 z-20 ${
-              showControls ? "opacity-100" : "opacity-0 pointer-events-none"
-            }`}
-          >
-            <div className="bg-gradient-to-t from-black/80 to-transparent p-6 space-y-4 relative">
-              {/* Progress Bar */}
-              <div className="space-y-2">
-                <input
-                  type="range"
-                  min="0"
-                  max={videoRef.current?.duration || 0}
-                  value={currentTime}
-                  step="0.1"
-                  onChange={(e) => {
-                    if (videoRef.current) {
-                      videoRef.current.currentTime = parseFloat(e.target.value);
-                      setCurrentTime(parseFloat(e.target.value));
-                    }
-                  }}
-                  style={{
-                    background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${videoRef.current?.duration ? (currentTime / videoRef.current.duration) * 100 : 0}%, #64748b ${videoRef.current?.duration ? (currentTime / videoRef.current.duration) * 100 : 0}%, #64748b 100%)`,
-                  }}
-                  className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-blue-600 hover:h-3 transition-all"
-                />
-                <div className="flex justify-between text-sm text-white">
-                  <span>{formatTime(currentTime)}</span>
-                  <span>{formatTime(videoRef.current?.duration || 0)}</span>
-                </div>
-              </div>
-
-              {/* Control Buttons */}
-              <div className="flex justify-between items-center relative">
-                {/* Volume on left */}
-                <div className="flex items-center gap-2">
-                  <span className="text-white text-sm">🔊</span>
+          {videoSrc && (
+            <div
+              className={`absolute bottom-0 left-0 right-0 transition-opacity duration-300 z-20 ${
+                showControls ? "opacity-100" : "opacity-0 pointer-events-none"
+              }`}
+            >
+              <div className="bg-gradient-to-t from-black/80 to-transparent p-6 space-y-4 relative">
+                {/* Progress Bar */}
+                <div className="space-y-2">
                   <input
                     type="range"
                     min="0"
-                    max="1"
-                    step="0.01"
-                    value={volume}
+                    max={videoRef.current?.duration || 0}
+                    value={currentTime}
+                    step="0.1"
                     onChange={(e) => {
-                      const v = parseFloat(e.target.value);
-                      setVolume(v);
                       if (videoRef.current) {
-                        videoRef.current.volume = v;
+                        videoRef.current.currentTime = parseFloat(
+                          e.target.value,
+                        );
+                        setCurrentTime(parseFloat(e.target.value));
                       }
                     }}
-                    className="volume-slider w-32 h-1 appearance-none cursor-pointer"
                     style={{
-                      background: `linear-gradient(to right, #3b82f6 ${volume * 100}%, #64748b ${volume * 100}%)`,
+                      background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${videoRef.current?.duration ? (currentTime / videoRef.current.duration) * 100 : 0}%, #64748b ${videoRef.current?.duration ? (currentTime / videoRef.current.duration) * 100 : 0}%, #64748b 100%)`,
                     }}
+                    className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-blue-600 hover:h-3 transition-all"
                   />
+                  <div className="flex justify-between text-sm text-white">
+                    <span>{formatTime(currentTime)}</span>
+                    <span>{formatTime(videoRef.current?.duration || 0)}</span>
+                  </div>
                 </div>
 
-                {/* Center controls group */}
-                <div className="flex gap-4 items-center">
-                  <select
-                    value={exportFormat}
-                    onChange={(e) =>
-                      setExportFormat(e.target.value as "mp4" | "avi")
-                    }
-                    disabled={isRecording || isConverting}
-                    className="px-3 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-600 transition text-sm disabled:opacity-50"
-                    title="Formato de descarga"
-                  >
-                    <option value="mp4">MP4</option>
-                    <option value="avi">AVI</option>
-                  </select>
+                {/* Control Buttons */}
+                <div className="flex justify-between items-center relative">
+                  {/* Volume on left */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-white text-sm">🔊</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={volume}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        setVolume(v);
+                        if (videoRef.current) {
+                          videoRef.current.volume = v;
+                        }
+                      }}
+                      className="volume-slider w-32 h-1 appearance-none cursor-pointer"
+                      style={{
+                        background: `linear-gradient(to right, #3b82f6 ${volume * 100}%, #64748b ${volume * 100}%)`,
+                      }}
+                    />
+                  </div>
 
-                  <button
-                    onClick={() => {
-                      if (videoRef.current) {
-                        videoRef.current.currentTime = Math.max(
-                          videoRef.current.currentTime - 5,
-                          0,
-                        );
+                  {/* Center controls group */}
+                  <div className="flex gap-4 items-center">
+                    <select
+                      value={exportFormat}
+                      onChange={(e) =>
+                        setExportFormat(e.target.value as "mp4" | "avi")
                       }
-                    }}
-                    className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-800 transition text-sm"
-                  >
-                    &lt;&lt;
-                  </button>
+                      disabled={isRecording || isConverting}
+                      className="px-3 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-600 transition text-sm disabled:opacity-50"
+                      title="Formato de descarga"
+                    >
+                      <option value="mp4">MP4</option>
+                      <option value="avi">AVI</option>
+                    </select>
 
-                  <button
-                    onClick={() => {
-                      if (videoRef.current) {
-                        videoRef.current.currentTime = Math.max(
-                          videoRef.current.currentTime - 1,
-                          0,
-                        );
-                      }
-                    }}
-                    className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-800 transition text-sm"
-                  >
-                    &lt;
-                  </button>
+                    <button
+                      onClick={() => {
+                        if (videoRef.current) {
+                          videoRef.current.currentTime = Math.max(
+                            videoRef.current.currentTime - 5,
+                            0,
+                          );
+                        }
+                      }}
+                      className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-800 transition text-sm"
+                    >
+                      &lt;&lt;
+                    </button>
 
-                  <button
-                    onClick={togglePlayPause}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition text-sm"
-                  >
-                    {isPlaying ? "⏸ Pause" : "▶ Play"}
-                  </button>
+                    <button
+                      onClick={() => {
+                        if (videoRef.current) {
+                          videoRef.current.currentTime = Math.max(
+                            videoRef.current.currentTime - 1,
+                            0,
+                          );
+                        }
+                      }}
+                      className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-800 transition text-sm"
+                    >
+                      &lt;
+                    </button>
 
-                  <button
-                    onClick={() => {
-                      if (videoRef.current) {
-                        videoRef.current.currentTime = Math.min(
-                          videoRef.current.currentTime + 1,
-                          videoRef.current.duration || 0,
-                        );
-                      }
-                    }}
-                    className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-800 transition text-sm"
-                  >
-                    &gt;
-                  </button>
+                    <button
+                      onClick={togglePlayPause}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition text-sm"
+                    >
+                      {isPlaying ? "⏸ Pause" : "▶ Play"}
+                    </button>
 
-                  <button
-                    onClick={() => {
-                      if (videoRef.current) {
-                        videoRef.current.currentTime = Math.min(
-                          videoRef.current.currentTime + 5,
-                          videoRef.current.duration || 0,
-                        );
-                      }
-                    }}
-                    className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-800 transition text-sm"
-                  >
-                    &gt;&gt;
-                  </button>
+                    <button
+                      onClick={() => {
+                        if (videoRef.current) {
+                          videoRef.current.currentTime = Math.min(
+                            videoRef.current.currentTime + 1,
+                            videoRef.current.duration || 0,
+                          );
+                        }
+                      }}
+                      className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-800 transition text-sm"
+                    >
+                      &gt;
+                    </button>
 
-                  <button
-                    onClick={startRecording}
-                    disabled={isRecording || isConverting}
-                    className={`px-4 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition text-sm ${
-                      isRecording ? "animate-pulse" : ""
-                    } disabled:opacity-50`}
-                  >
-                    {isConverting ? "⏳" : "🔴"}
-                  </button>
-                </div>
+                    <button
+                      onClick={() => {
+                        if (videoRef.current) {
+                          videoRef.current.currentTime = Math.min(
+                            videoRef.current.currentTime + 5,
+                            videoRef.current.duration || 0,
+                          );
+                        }
+                      }}
+                      className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-800 transition text-sm"
+                    >
+                      &gt;&gt;
+                    </button>
 
-                {/* Gear on right */}
-                <div ref={settingsMenuRef} className="relative">
-                  <button
-                    onClick={() => setShowSettingsMenu(!showSettingsMenu)}
-                    className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-600 transition text-sm"
-                    title="Settings"
-                  >
-                    ⚙️
-                  </button>
-                  {showSettingsMenu && (
-                    <div className="absolute bottom-full right-0 mb-1 bg-gray-800 rounded-lg shadow-lg border border-gray-700 min-w-max">
-                      {/* Speed Option */}
-                      <div className="relative">
-                        <button
-                          onClick={() => setShowSpeedSubmenu(!showSpeedSubmenu)}
-                          className="w-full px-4 py-2 text-left text-white hover:bg-gray-700 transition flex items-center justify-between"
-                        >
-                          <span>Speed</span>
-                          <span className="ml-2">▶</span>
-                        </button>
-                        {/* Speed Submenu Items */}
-                        {showSpeedSubmenu && (
-                          <div className="absolute right-full top-1/2 -translate-y-1/2 bg-gray-800 rounded-lg shadow-lg border border-gray-700 flex flex-col mr-1">
-                            {[0.25, 0.5, 0.75, 1, 1.5, 2].map((speed) => (
-                              <button
-                                key={speed}
-                                onClick={() => {
-                                  handleSpeedChange(speed);
-                                  setShowSettingsMenu(false);
-                                  setShowSpeedSubmenu(false);
-                                }}
-                                className={`px-3 py-1 text-xs transition ${
-                                  playbackSpeed === speed
-                                    ? "bg-blue-600 text-white"
-                                    : "text-gray-200 hover:bg-gray-700"
-                                } ${speed === 0.25 ? "rounded-tl-lg" : ""} ${
-                                  speed === 2 ? "rounded-bl-lg" : ""
-                                }`}
-                              >
-                                {speed}x
-                              </button>
-                            ))}
-                          </div>
-                        )}
+                    <button
+                      onClick={startRecording}
+                      disabled={isRecording || isConverting}
+                      className={`px-4 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition text-sm ${
+                        isRecording ? "animate-pulse" : ""
+                      } disabled:opacity-50`}
+                    >
+                      {isConverting ? "⏳" : "🔴"}
+                    </button>
+                  </div>
+
+                  {/* Gear on right */}
+                  <div ref={settingsMenuRef} className="relative">
+                    <button
+                      onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+                      className="px-4 py-2 bg-gray-700 text-white rounded-lg font-bold hover:bg-gray-600 transition text-sm"
+                      title="Settings"
+                    >
+                      ⚙️
+                    </button>
+                    {showSettingsMenu && (
+                      <div className="absolute bottom-full right-0 mb-1 bg-gray-800 rounded-lg shadow-lg border border-gray-700 min-w-max">
+                        {/* Speed Option */}
+                        <div className="relative">
+                          <button
+                            onClick={() =>
+                              setShowSpeedSubmenu(!showSpeedSubmenu)
+                            }
+                            className="w-full px-4 py-2 text-left text-white hover:bg-gray-700 transition flex items-center justify-between"
+                          >
+                            <span>Speed</span>
+                            <span className="ml-2">▶</span>
+                          </button>
+                          {/* Speed Submenu Items */}
+                          {showSpeedSubmenu && (
+                            <div className="absolute right-full top-1/2 -translate-y-1/2 bg-gray-800 rounded-lg shadow-lg border border-gray-700 flex flex-col mr-1">
+                              {[0.25, 0.5, 0.75, 1, 1.5, 2].map((speed) => (
+                                <button
+                                  key={speed}
+                                  onClick={() => {
+                                    handleSpeedChange(speed);
+                                    setShowSettingsMenu(false);
+                                    setShowSpeedSubmenu(false);
+                                  }}
+                                  className={`px-3 py-1 text-xs transition ${
+                                    playbackSpeed === speed
+                                      ? "bg-blue-600 text-white"
+                                      : "text-gray-200 hover:bg-gray-700"
+                                  } ${speed === 0.25 ? "rounded-tl-lg" : ""} ${
+                                    speed === 2 ? "rounded-bl-lg" : ""
+                                  }`}
+                                >
+                                  {speed}x
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {recordingUrl && (
+          {videoSrc && recordingUrl && (
             <div className="absolute bottom-20 left-0 right-0 flex justify-center z-20">
               <a
                 href={recordingUrl}
@@ -983,7 +1100,7 @@ export default function VideoPlayer() {
               </a>
             </div>
           )}
-          {recordingMessage && (
+          {videoSrc && recordingMessage && (
             <div className="absolute bottom-32 left-0 right-0 flex justify-center z-20">
               <div className="px-3 py-1.5 bg-black/70 text-white text-sm rounded-md">
                 {recordingMessage}
