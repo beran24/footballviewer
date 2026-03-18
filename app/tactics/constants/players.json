@@ -1,0 +1,26 @@
+{
+  "roles": {
+    "O-QB": "QB",
+    "O-RB": "RB",
+    "O-C": "C",
+    "O-LG": "LG",
+    "O-RG": "RG",
+    "O-LT": "LT",
+    "O-RT": "RT",
+    "O-TE": "TE",
+    "O-WR1": "WR",
+    "O-WR2": "WR",
+    "O-SLOT": "SL",
+    "D-DT1": "DT",
+    "D-DT2": "DT",
+    "D-DE1": "DE",
+    "D-DE2": "DE",
+    "D-LB1": "LB",
+    "D-LB2": "LB",
+    "D-LB3": "LB",
+    "D-CB1": "CB",
+    "D-CB2": "CB",
+    "D-S1": "S",
+    "D-S2": "S"
+  }
+}

@@ -1,0 +1,800 @@
+{
+  "offense": {
+    "spread": {
+      "label": "Spread",
+      "players": {
+        "O-QB": {
+          "lanePercent": 50,
+          "depthFromLos": 4.2
+        },
+        "O-RB": {
+          "lanePercent": 60,
+          "depthFromLos": 6.8
+        },
+        "O-C": {
+          "lanePercent": 50,
+          "depthFromLos": 0
+        },
+        "O-LG": {
+          "lanePercent": 47,
+          "depthFromLos": 0
+        },
+        "O-RG": {
+          "lanePercent": 53,
+          "depthFromLos": 0
+        },
+        "O-LT": {
+          "lanePercent": 44,
+          "depthFromLos": 0
+        },
+        "O-RT": {
+          "lanePercent": 56,
+          "depthFromLos": 0
+        },
+        "O-TE": {
+          "lanePercent": 70,
+          "depthFromLos": 2
+        },
+        "O-WR1": {
+          "lanePercent": 24,
+          "depthFromLos": 0
+        },
+        "O-WR2": {
+          "lanePercent": 78,
+          "depthFromLos": 0
+        },
+        "O-SLOT": {
+          "lanePercent": 32,
+          "depthFromLos": 2,
+          "role": "SL"
+        }
+      }
+    },
+    "i-form": {
+      "label": "I-Form",
+      "players": {
+        "O-QB": {
+          "lanePercent": 50,
+          "depthFromLos": 4.8
+        },
+        "O-RB": {
+          "lanePercent": 50,
+          "depthFromLos": 8.8,
+          "role": "TB"
+        },
+        "O-C": {
+          "lanePercent": 50,
+          "depthFromLos": 0
+        },
+        "O-LG": {
+          "lanePercent": 47,
+          "depthFromLos": 0
+        },
+        "O-RG": {
+          "lanePercent": 53,
+          "depthFromLos": 0
+        },
+        "O-LT": {
+          "lanePercent": 44,
+          "depthFromLos": 0
+        },
+        "O-RT": {
+          "lanePercent": 56,
+          "depthFromLos": 0
+        },
+        "O-TE": {
+          "lanePercent": 66,
+          "depthFromLos": 2
+        },
+        "O-WR1": {
+          "lanePercent": 22,
+          "depthFromLos": 0
+        },
+        "O-WR2": {
+          "lanePercent": 82,
+          "depthFromLos": 0
+        },
+        "O-SLOT": {
+          "lanePercent": 50,
+          "depthFromLos": 6.8,
+          "role": "FB"
+        }
+      }
+    },
+    "trips-right": {
+      "label": "Trips Right",
+      "players": {
+        "O-QB": {
+          "lanePercent": 50,
+          "depthFromLos": 4.5
+        },
+        "O-RB": {
+          "lanePercent": 45,
+          "depthFromLos": 7.2
+        },
+        "O-C": {
+          "lanePercent": 50,
+          "depthFromLos": 0
+        },
+        "O-LG": {
+          "lanePercent": 47,
+          "depthFromLos": 0
+        },
+        "O-RG": {
+          "lanePercent": 53,
+          "depthFromLos": 0
+        },
+        "O-LT": {
+          "lanePercent": 44,
+          "depthFromLos": 0
+        },
+        "O-RT": {
+          "lanePercent": 56,
+          "depthFromLos": 0
+        },
+        "O-TE": {
+          "lanePercent": 68,
+          "depthFromLos": 2
+        },
+        "O-WR1": {
+          "lanePercent": 20,
+          "depthFromLos": 0
+        },
+        "O-WR2": {
+          "lanePercent": 78,
+          "depthFromLos": 0
+        },
+        "O-SLOT": {
+          "lanePercent": 70,
+          "depthFromLos": 2,
+          "role": "SL"
+        }
+      }
+    },
+    "singleback": {
+      "label": "Singleback",
+      "players": {
+        "O-QB": {
+          "lanePercent": 50,
+          "depthFromLos": 3.6,
+          "role": "QB"
+        },
+        "O-RB": {
+          "lanePercent": 50,
+          "depthFromLos": 6.8,
+          "role": "RB"
+        },
+        "O-C": {
+          "lanePercent": 50,
+          "depthFromLos": 0
+        },
+        "O-LG": {
+          "lanePercent": 47,
+          "depthFromLos": 0
+        },
+        "O-RG": {
+          "lanePercent": 53,
+          "depthFromLos": 0
+        },
+        "O-LT": {
+          "lanePercent": 44,
+          "depthFromLos": 0
+        },
+        "O-RT": {
+          "lanePercent": 56,
+          "depthFromLos": 0
+        },
+        "O-TE": {
+          "lanePercent": 68,
+          "depthFromLos": 2
+        },
+        "O-WR1": {
+          "lanePercent": 22,
+          "depthFromLos": 0
+        },
+        "O-WR2": {
+          "lanePercent": 80,
+          "depthFromLos": 0
+        },
+        "O-SLOT": {
+          "lanePercent": 34,
+          "depthFromLos": 2,
+          "role": "SL"
+        }
+      }
+    },
+    "pistol": {
+      "label": "Pistol",
+      "players": {
+        "O-QB": {
+          "lanePercent": 50,
+          "depthFromLos": 3.4,
+          "role": "QB"
+        },
+        "O-RB": {
+          "lanePercent": 50,
+          "depthFromLos": 7,
+          "role": "RB"
+        },
+        "O-C": {
+          "lanePercent": 50,
+          "depthFromLos": 0
+        },
+        "O-LG": {
+          "lanePercent": 47,
+          "depthFromLos": 0
+        },
+        "O-RG": {
+          "lanePercent": 53,
+          "depthFromLos": 0
+        },
+        "O-LT": {
+          "lanePercent": 44,
+          "depthFromLos": 0
+        },
+        "O-RT": {
+          "lanePercent": 56,
+          "depthFromLos": 0
+        },
+        "O-TE": {
+          "lanePercent": 66,
+          "depthFromLos": 2
+        },
+        "O-WR1": {
+          "lanePercent": 20,
+          "depthFromLos": 0
+        },
+        "O-WR2": {
+          "lanePercent": 80,
+          "depthFromLos": 0
+        },
+        "O-SLOT": {
+          "lanePercent": 32,
+          "depthFromLos": 2,
+          "role": "SL"
+        }
+      }
+    },
+    "empty": {
+      "label": "Empty (No RB)",
+      "players": {
+        "O-QB": {
+          "lanePercent": 50,
+          "depthFromLos": 4.6,
+          "role": "QB"
+        },
+        "O-RB": {
+          "lanePercent": 62,
+          "depthFromLos": 2,
+          "role": "WR3"
+        },
+        "O-C": {
+          "lanePercent": 50,
+          "depthFromLos": 0
+        },
+        "O-LG": {
+          "lanePercent": 47,
+          "depthFromLos": 0
+        },
+        "O-RG": {
+          "lanePercent": 53,
+          "depthFromLos": 0
+        },
+        "O-LT": {
+          "lanePercent": 44,
+          "depthFromLos": 0
+        },
+        "O-RT": {
+          "lanePercent": 56,
+          "depthFromLos": 0
+        },
+        "O-TE": {
+          "lanePercent": 38,
+          "depthFromLos": 2,
+          "role": "WR4"
+        },
+        "O-WR1": {
+          "lanePercent": 18,
+          "depthFromLos": 0,
+          "role": "WR"
+        },
+        "O-WR2": {
+          "lanePercent": 82,
+          "depthFromLos": 0,
+          "role": "WR"
+        },
+        "O-SLOT": {
+          "lanePercent": 70,
+          "depthFromLos": 2,
+          "role": "SL"
+        }
+      }
+    },
+    "wishbone": {
+      "label": "Wishbone",
+      "players": {
+        "O-QB": {
+          "lanePercent": 50,
+          "depthFromLos": 1.4,
+          "role": "QB"
+        },
+        "O-RB": {
+          "lanePercent": 50,
+          "depthFromLos": 4.4,
+          "role": "FB"
+        },
+        "O-C": {
+          "lanePercent": 50,
+          "depthFromLos": 0
+        },
+        "O-LG": {
+          "lanePercent": 47,
+          "depthFromLos": 0
+        },
+        "O-RG": {
+          "lanePercent": 53,
+          "depthFromLos": 0
+        },
+        "O-LT": {
+          "lanePercent": 44,
+          "depthFromLos": 0
+        },
+        "O-RT": {
+          "lanePercent": 56,
+          "depthFromLos": 0
+        },
+        "O-TE": {
+          "lanePercent": 58,
+          "depthFromLos": 5.8,
+          "role": "HB"
+        },
+        "O-WR1": {
+          "lanePercent": 20,
+          "depthFromLos": 0,
+          "role": "WR"
+        },
+        "O-WR2": {
+          "lanePercent": 80,
+          "depthFromLos": 0,
+          "role": "WR"
+        },
+        "O-SLOT": {
+          "lanePercent": 42,
+          "depthFromLos": 5.8,
+          "role": "HB"
+        }
+      }
+    },
+    "flexbone": {
+      "label": "Flexbone",
+      "players": {
+        "O-QB": {
+          "lanePercent": 50,
+          "depthFromLos": 1.6,
+          "role": "QB"
+        },
+        "O-RB": {
+          "lanePercent": 50,
+          "depthFromLos": 3.8,
+          "role": "FB"
+        },
+        "O-C": {
+          "lanePercent": 50,
+          "depthFromLos": 0
+        },
+        "O-LG": {
+          "lanePercent": 47,
+          "depthFromLos": 0
+        },
+        "O-RG": {
+          "lanePercent": 53,
+          "depthFromLos": 0
+        },
+        "O-LT": {
+          "lanePercent": 44,
+          "depthFromLos": 0
+        },
+        "O-RT": {
+          "lanePercent": 56,
+          "depthFromLos": 0
+        },
+        "O-TE": {
+          "lanePercent": 60,
+          "depthFromLos": 3.6,
+          "role": "WB"
+        },
+        "O-WR1": {
+          "lanePercent": 18,
+          "depthFromLos": 0,
+          "role": "WR"
+        },
+        "O-WR2": {
+          "lanePercent": 82,
+          "depthFromLos": 0,
+          "role": "WR"
+        },
+        "O-SLOT": {
+          "lanePercent": 40,
+          "depthFromLos": 3.6,
+          "role": "WB"
+        }
+      }
+    }
+  },
+  "defense": {
+    "46": {
+      "label": "46",
+      "players": {
+        "D-DT1": {
+          "lanePercent": 50,
+          "depthFromLos": -1.1,
+          "role": "NT"
+        },
+        "D-DT2": {
+          "lanePercent": 45,
+          "depthFromLos": -1.2,
+          "role": "DT"
+        },
+        "D-DE1": {
+          "lanePercent": 40,
+          "depthFromLos": -1.6,
+          "role": "DE"
+        },
+        "D-DE2": {
+          "lanePercent": 56,
+          "depthFromLos": -1.6,
+          "role": "DE"
+        },
+        "D-LB1": {
+          "lanePercent": 43,
+          "depthFromLos": -4.8,
+          "role": "LB"
+        },
+        "D-LB2": {
+          "lanePercent": 52,
+          "depthFromLos": -4.8,
+          "role": "LB"
+        },
+        "D-LB3": {
+          "lanePercent": 60,
+          "depthFromLos": -3.8,
+          "role": "SS"
+        },
+        "D-CB1": {
+          "lanePercent": 18,
+          "depthFromLos": -4.8,
+          "role": "CB"
+        },
+        "D-CB2": {
+          "lanePercent": 82,
+          "depthFromLos": -4.8,
+          "role": "CB"
+        },
+        "D-S1": {
+          "lanePercent": 35,
+          "depthFromLos": -10.8,
+          "role": "FS"
+        },
+        "D-S2": {
+          "lanePercent": 68,
+          "depthFromLos": -7.2,
+          "role": "S"
+        }
+      }
+    },
+    "4-3": {
+      "label": "4-3",
+      "players": {
+        "D-DT1": {
+          "lanePercent": 51,
+          "depthFromLos": -1.2
+        },
+        "D-DT2": {
+          "lanePercent": 48,
+          "depthFromLos": -1.2
+        },
+        "D-DE1": {
+          "lanePercent": 45,
+          "depthFromLos": -1.6
+        },
+        "D-DE2": {
+          "lanePercent": 54,
+          "depthFromLos": -1.6
+        },
+        "D-LB1": {
+          "lanePercent": 43,
+          "depthFromLos": -5
+        },
+        "D-LB2": {
+          "lanePercent": 50,
+          "depthFromLos": -5.2
+        },
+        "D-LB3": {
+          "lanePercent": 57,
+          "depthFromLos": -5
+        },
+        "D-CB1": {
+          "lanePercent": 24,
+          "depthFromLos": -4.5
+        },
+        "D-CB2": {
+          "lanePercent": 78,
+          "depthFromLos": -4.5
+        },
+        "D-S1": {
+          "lanePercent": 35,
+          "depthFromLos": -10.8
+        },
+        "D-S2": {
+          "lanePercent": 65,
+          "depthFromLos": -10.8
+        }
+      }
+    },
+    "3-4": {
+      "label": "3-4",
+      "players": {
+        "D-DT1": {
+          "lanePercent": 51,
+          "depthFromLos": -1.2
+        },
+        "D-DT2": {
+          "lanePercent": 48,
+          "depthFromLos": -1.4
+        },
+        "D-DE1": {
+          "lanePercent": 45,
+          "depthFromLos": -1.7
+        },
+        "D-DE2": {
+          "lanePercent": 54,
+          "depthFromLos": -1.7
+        },
+        "D-LB1": {
+          "lanePercent": 40,
+          "depthFromLos": -5
+        },
+        "D-LB2": {
+          "lanePercent": 50,
+          "depthFromLos": -5.4
+        },
+        "D-LB3": {
+          "lanePercent": 60,
+          "depthFromLos": -5
+        },
+        "D-CB1": {
+          "lanePercent": 20,
+          "depthFromLos": -4.8
+        },
+        "D-CB2": {
+          "lanePercent": 80,
+          "depthFromLos": -4.8
+        },
+        "D-S1": {
+          "lanePercent": 36,
+          "depthFromLos": -11.2
+        },
+        "D-S2": {
+          "lanePercent": 64,
+          "depthFromLos": -11.2
+        }
+      }
+    },
+    "nickel": {
+      "label": "Nickel",
+      "players": {
+        "D-DT1": {
+          "lanePercent": 51,
+          "depthFromLos": -1.2
+        },
+        "D-DT2": {
+          "lanePercent": 48,
+          "depthFromLos": -1.2
+        },
+        "D-DE1": {
+          "lanePercent": 45,
+          "depthFromLos": -1.6
+        },
+        "D-DE2": {
+          "lanePercent": 54,
+          "depthFromLos": -1.6
+        },
+        "D-LB1": {
+          "lanePercent": 44,
+          "depthFromLos": -5
+        },
+        "D-LB2": {
+          "lanePercent": 56,
+          "depthFromLos": -5
+        },
+        "D-LB3": {
+          "lanePercent": 68,
+          "depthFromLos": -5.6
+        },
+        "D-CB1": {
+          "lanePercent": 18,
+          "depthFromLos": -5.2
+        },
+        "D-CB2": {
+          "lanePercent": 82,
+          "depthFromLos": -5.2
+        },
+        "D-S1": {
+          "lanePercent": 32,
+          "depthFromLos": -11.8
+        },
+        "D-S2": {
+          "lanePercent": 68,
+          "depthFromLos": -11.8
+        }
+      }
+    },
+    "4-2-5": {
+      "label": "4-2-5",
+      "players": {
+        "D-DT1": {
+          "lanePercent": 51,
+          "depthFromLos": -1.2
+        },
+        "D-DT2": {
+          "lanePercent": 48,
+          "depthFromLos": -1.2
+        },
+        "D-DE1": {
+          "lanePercent": 45,
+          "depthFromLos": -1.6
+        },
+        "D-DE2": {
+          "lanePercent": 54,
+          "depthFromLos": -1.6
+        },
+        "D-LB1": {
+          "lanePercent": 45,
+          "depthFromLos": -5
+        },
+        "D-LB2": {
+          "lanePercent": 55,
+          "depthFromLos": -5
+        },
+        "D-LB3": {
+          "lanePercent": 66,
+          "depthFromLos": -6.2,
+          "role": "NB"
+        },
+        "D-CB1": {
+          "lanePercent": 20,
+          "depthFromLos": -5
+        },
+        "D-CB2": {
+          "lanePercent": 80,
+          "depthFromLos": -5
+        },
+        "D-S1": {
+          "lanePercent": 36,
+          "depthFromLos": -11.5
+        },
+        "D-S2": {
+          "lanePercent": 64,
+          "depthFromLos": -11.5
+        }
+      }
+    },
+    "dime": {
+      "label": "Dime",
+      "players": {
+        "D-DT1": {
+          "lanePercent": 50,
+          "depthFromLos": -1.2,
+          "role": "DT"
+        },
+        "D-DT2": {
+          "lanePercent": 50,
+          "depthFromLos": -1.2,
+          "role": "DT",
+          "isActive": false
+        },
+        "D-DE1": {
+          "lanePercent": 46,
+          "depthFromLos": -1.6,
+          "role": "DE"
+        },
+        "D-DE2": {
+          "lanePercent": 54,
+          "depthFromLos": -1.6,
+          "role": "DE"
+        },
+        "D-LB1": {
+          "lanePercent": 46,
+          "depthFromLos": -5,
+          "role": "LB"
+        },
+        "D-LB2": {
+          "lanePercent": 54,
+          "depthFromLos": -5,
+          "role": "LB"
+        },
+        "D-LB3": {
+          "lanePercent": 66,
+          "depthFromLos": -6.6,
+          "role": "DB"
+        },
+        "D-CB1": {
+          "lanePercent": 18,
+          "depthFromLos": -5.2,
+          "role": "CB"
+        },
+        "D-CB2": {
+          "lanePercent": 82,
+          "depthFromLos": -5.2,
+          "role": "CB"
+        },
+        "D-S1": {
+          "lanePercent": 34,
+          "depthFromLos": -11.8,
+          "role": "S"
+        },
+        "D-S2": {
+          "lanePercent": 66,
+          "depthFromLos": -11.8,
+          "role": "S"
+        }
+      }
+    },
+    "4-4": {
+      "label": "4-4",
+      "players": {
+        "D-DT1": {
+          "lanePercent": 51,
+          "depthFromLos": -1.2
+        },
+        "D-DT2": {
+          "lanePercent": 48,
+          "depthFromLos": -1.2
+        },
+        "D-DE1": {
+          "lanePercent": 45,
+          "depthFromLos": -1.6
+        },
+        "D-DE2": {
+          "lanePercent": 54,
+          "depthFromLos": -1.6
+        },
+        "D-LB1": {
+          "lanePercent": 40,
+          "depthFromLos": -4.8,
+          "role": "LB"
+        },
+        "D-LB2": {
+          "lanePercent": 47,
+          "depthFromLos": -4.8,
+          "role": "LB"
+        },
+        "D-LB3": {
+          "lanePercent": 54,
+          "depthFromLos": -4.8,
+          "role": "LB"
+        },
+        "D-CB1": {
+          "lanePercent": 61,
+          "depthFromLos": -4.8,
+          "role": "LB"
+        },
+        "D-CB2": {
+          "lanePercent": 20,
+          "depthFromLos": -6,
+          "role": "CB"
+        },
+        "D-S1": {
+          "lanePercent": 80,
+          "depthFromLos": -6,
+          "role": "CB"
+        },
+        "D-S2": {
+          "lanePercent": 50,
+          "depthFromLos": -11,
+          "role": "S"
+        }
+      }
+    }
+  }
+}
