@@ -16,6 +16,9 @@ export type SelectedPlayerView = {
   role: string;
   isEligible: boolean;
   routeId: RouteId | null;
+  hasCustomRoute: boolean;
+  coordX: number;
+  coordY: number;
 } | null;
 
 export type SavedPlaySummary = {

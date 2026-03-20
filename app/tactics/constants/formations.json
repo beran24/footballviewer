@@ -83,8 +83,8 @@
           "depthFromLos": 0
         },
         "O-TE": {
-          "lanePercent": 66,
-          "depthFromLos": 2
+          "lanePercent": 59,
+          "depthFromLos": 0
         },
         "O-WR1": {
           "lanePercent": 22,
@@ -92,7 +92,7 @@
         },
         "O-WR2": {
           "lanePercent": 82,
-          "depthFromLos": 0
+          "depthFromLos": 2
         },
         "O-SLOT": {
           "lanePercent": 50,
@@ -133,8 +133,8 @@
           "depthFromLos": 0
         },
         "O-TE": {
-          "lanePercent": 68,
-          "depthFromLos": 2
+          "lanePercent": 59,
+          "depthFromLos": 0
         },
         "O-WR1": {
           "lanePercent": 20,
@@ -142,7 +142,7 @@
         },
         "O-WR2": {
           "lanePercent": 78,
-          "depthFromLos": 0
+          "depthFromLos": 2
         },
         "O-SLOT": {
           "lanePercent": 70,
@@ -490,27 +490,27 @@
           "depthFromLos": -1.2
         },
         "D-DT2": {
-          "lanePercent": 48,
+          "lanePercent": 46,
           "depthFromLos": -1.2
         },
         "D-DE1": {
-          "lanePercent": 45,
+          "lanePercent": 42,
           "depthFromLos": -1.6
         },
         "D-DE2": {
-          "lanePercent": 54,
+          "lanePercent": 58,
           "depthFromLos": -1.6
         },
         "D-LB1": {
-          "lanePercent": 43,
+          "lanePercent": 44,
           "depthFromLos": -5
         },
         "D-LB2": {
-          "lanePercent": 50,
-          "depthFromLos": -5.2
+          "lanePercent": 48,
+          "depthFromLos": -5
         },
         "D-LB3": {
-          "lanePercent": 57,
+          "lanePercent": 54,
           "depthFromLos": -5
         },
         "D-CB1": {
@@ -538,37 +538,37 @@
           "lanePercent": 51,
           "depthFromLos": -1.2
         },
-        "D-DT2": {
-          "lanePercent": 48,
-          "depthFromLos": -1.4
-        },
         "D-DE1": {
-          "lanePercent": 45,
+          "lanePercent": 43,
           "depthFromLos": -1.7
         },
         "D-DE2": {
-          "lanePercent": 54,
+          "lanePercent": 57,
           "depthFromLos": -1.7
         },
         "D-LB1": {
           "lanePercent": 40,
-          "depthFromLos": -5
+          "depthFromLos": -4
         },
         "D-LB2": {
-          "lanePercent": 50,
-          "depthFromLos": -5.4
+          "lanePercent": 54,
+          "depthFromLos": -5
         },
         "D-LB3": {
-          "lanePercent": 60,
+          "lanePercent": 61,
+          "depthFromLos": -4
+        },
+        "D-LB4": {
+          "lanePercent": 47,
           "depthFromLos": -5
         },
         "D-CB1": {
           "lanePercent": 20,
-          "depthFromLos": -4.8
+          "depthFromLos": -7
         },
         "D-CB2": {
           "lanePercent": 80,
-          "depthFromLos": -4.8
+          "depthFromLos": -7
         },
         "D-S1": {
           "lanePercent": 36,

@@ -1,5 +1,14 @@
 import { CENTER_HASH_PERCENT } from "./constants";
+import {
+  applyDefenseFormation,
+  applyOffenseFormation,
+  getQbDepthForOffenseFormation,
+} from "./constants/formations";
 import type { GameState, Player } from "./types";
+
+const INITIAL_OFFENSE_FORMATION = "i-form";
+const INITIAL_DEFENSE_FORMATION = "4-3";
+const INITIAL_QB_UNDER_GUN = true;
 
 const makeOffensePlayers = (): Player[] => [
   {
@@ -114,7 +123,7 @@ const makeOffensePlayers = (): Player[] => [
   },
 ];
 
-const makeDefensePlayers = (): Player[] => [
+export const makeDefensePlayers = (): Player[] => [
   {
     id: "D-DT1",
     number: 91,
@@ -186,6 +195,16 @@ const makeDefensePlayers = (): Player[] => [
     depthFromLos: -3.8,
   },
   {
+    id: "D-LB4",
+    number: 58,
+    role: "LB",
+    isActive: false,
+    isEligible: false,
+    routeId: null,
+    lanePercent: 50,
+    depthFromLos: -4.8,
+  },
+  {
     id: "D-CB1",
     number: 24,
     role: "CB",
@@ -232,23 +251,39 @@ export const initialGameState: GameState = {
     name: "Offense",
     colorClass: "bg-sky-500/95",
     textClass: "text-sky-100",
-    players: makeOffensePlayers(),
+    players: applyOffenseFormation(
+      makeOffensePlayers(),
+      INITIAL_OFFENSE_FORMATION,
+    ).map((player) =>
+      player.id === "O-QB"
+        ? {
+            ...player,
+            depthFromLos: getQbDepthForOffenseFormation(
+              INITIAL_OFFENSE_FORMATION,
+              INITIAL_QB_UNDER_GUN,
+            ),
+          }
+        : player,
+    ),
   },
   defense: {
     name: "Defense",
     colorClass: "bg-orange-500/95",
     textClass: "text-orange-100",
-    players: makeDefensePlayers(),
+    players: applyDefenseFormation(
+      makeDefensePlayers(),
+      INITIAL_DEFENSE_FORMATION,
+    ),
   },
   settings: {
     lineOfScrimmageYard: 50,
     ballPlayableYard: 50,
     ballXPercent: CENTER_HASH_PERCENT,
-    offenseFormation: "i-form",
-    defenseFormation: "4-3",
+    offenseFormation: INITIAL_OFFENSE_FORMATION,
+    defenseFormation: INITIAL_DEFENSE_FORMATION,
     defenseCoverage: "none",
     nearZoneCount: 4,
-    qbUnderGun: true,
+    qbUnderGun: INITIAL_QB_UNDER_GUN,
     playersLocked: false,
   },
 };

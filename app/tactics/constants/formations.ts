@@ -36,6 +36,7 @@ const playerDefaults = playerDefaultsJson as PlayerDefaults;
 const applyUpdates = (
   players: Player[],
   updates: Record<string, FormationUpdate>,
+  missingPlayerActive = true,
 ): Player[] =>
   players.map((player) => {
     const defaults = getDefaultsForPlayer(player.id);
@@ -45,7 +46,7 @@ const applyUpdates = (
         ...player,
         role: defaults.role,
         isEligible: defaults.isEligible,
-        isActive: true,
+        isActive: missingPlayerActive,
       };
     }
 
@@ -106,7 +107,7 @@ export const getQbDepthForOffenseFormation = (
   qbUnderGun: boolean,
 ): number => {
   if (!qbUnderGun) {
-    return 1.2;
+    return 2.5;
   }
 
   const selectedFormation =
@@ -139,5 +140,5 @@ export const applyDefenseFormation = (
   const updates = (
     formationLayouts.defense[formation] ?? formationLayouts.defense["4-3"]
   ).players;
-  return applyUpdates(players, updates);
+  return applyUpdates(players, updates, false);
 };

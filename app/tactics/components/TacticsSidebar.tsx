@@ -288,9 +288,15 @@ export function TacticsSidebar() {
 
       {selectedPlayer ? (
         <div className="mt-4 rounded-lg border border-slate-700 bg-slate-800/60 p-3">
-          <p className="text-xs uppercase tracking-wide text-slate-400">
-            Selected Player
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs uppercase tracking-wide text-slate-400">
+              Selected Player
+            </p>
+            <p className="text-xs text-slate-400">
+              [{selectedPlayer.coordX.toFixed(1)},{" "}
+              {selectedPlayer.coordY.toFixed(1)}]
+            </p>
+          </div>
           <p className="mt-1 text-sm text-slate-200">
             {selectedPlayer.teamKey.toUpperCase()} - {selectedPlayer.playerId}
           </p>
@@ -317,7 +323,9 @@ export function TacticsSidebar() {
                 value={
                   selectedPlayer.teamKey === "offense" &&
                   selectedPlayer.isEligible
-                    ? (selectedPlayer.routeId ?? "")
+                    ? selectedPlayer.hasCustomRoute
+                      ? "__custom__"
+                      : (selectedPlayer.routeId ?? "")
                     : ""
                 }
                 onChange={(event) =>
@@ -337,6 +345,11 @@ export function TacticsSidebar() {
                 selectedPlayer.isEligible ? (
                   <>
                     <option value="">No route</option>
+                    {selectedPlayer.hasCustomRoute && (
+                      <option value="__custom__" disabled>
+                        Custom
+                      </option>
+                    )}
                     {routeOptions.map((option) => (
                       <option key={option.id} value={option.id}>
                         {option.label}

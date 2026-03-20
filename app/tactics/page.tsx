@@ -30,7 +30,7 @@ import {
   type GameStateContextValue,
   type SavedPlaySummary,
 } from "./GameStateProvider";
-import { initialGameState } from "./gameSetup";
+import { initialGameState, makeDefensePlayers } from "./gameSetup";
 import type {
   DefenseCoverageId,
   DefenseFormationId,
@@ -68,16 +68,57 @@ type DefenseAssignmentOverlay = {
   endY: number;
 };
 
+type OffenseCustomRouteTarget = {
+  deltaXPercent: number;
+  deltaYPercent: number;
+};
+
+type OffenseCustomRouteOverlay = {
+  playerId: string;
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  isEligible: boolean;
+  isPullBlock: boolean;
+  pathData: string | null;
+  capStartX: number | null;
+  capStartY: number | null;
+  capEndX: number | null;
+  capEndY: number | null;
+};
+
+type ZoneHandleDirection = "top" | "bottom" | "left" | "right";
+
+type EditableCoverageZoneRect = {
+  leftPercent: number;
+  top: number;
+  widthPercent: number;
+  height: number;
+};
+
+type RenderedDefenseCoverageZone = EditableCoverageZoneRect & {
+  id: string;
+  label: string;
+  topOffsetFromLosPercent: number;
+};
+
 type SavedPlayRecord = {
   id: string;
   name: string;
   updatedAt: string;
   game: GameState;
   defenseAssignments: Record<string, DefenseAssignmentTarget>;
+  offenseCustomRoutes: Record<string, OffenseCustomRouteTarget>;
 };
 
 const SAVED_PLAYS_STORAGE_KEY = "footballviewer.tactics.savedPlays.v1";
 const MAX_SAVED_PLAYS = 50;
+const MIN_COVERAGE_ZONE_HEIGHT_PERCENT = 2;
+const MIN_COVERAGE_ZONE_WIDTH_PERCENT = 4;
+const MAX_INELIGIBLE_BLOCK_YARDS = 10;
+const MAX_PULL_BLOCK_YARDS = 25;
+const INELIGIBLE_BLOCK_T_CAP_PX = 7;
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -129,13 +170,17 @@ const parseSavedPlays = (rawValue: string | null): SavedPlayRecord[] => {
           return false;
         }
 
-        const assignmentCandidate = entry.defenseAssignments;
+        const defenseAssignmentCandidate = entry.defenseAssignments;
+        const offenseCustomRouteCandidate = entry.offenseCustomRoutes;
         return (
           typeof entry.id === "string" &&
           typeof entry.name === "string" &&
           typeof entry.updatedAt === "string" &&
           isPlayableGameState(entry.game) &&
-          (assignmentCandidate === undefined || isObject(assignmentCandidate))
+          (defenseAssignmentCandidate === undefined ||
+            isObject(defenseAssignmentCandidate)) &&
+          (offenseCustomRouteCandidate === undefined ||
+            isObject(offenseCustomRouteCandidate))
         );
       })
       .map((entry) => ({
@@ -147,6 +192,11 @@ const parseSavedPlays = (rawValue: string | null): SavedPlayRecord[] => {
           (entry.defenseAssignments as Record<
             string,
             DefenseAssignmentTarget
+          >) ?? {},
+        offenseCustomRoutes:
+          (entry.offenseCustomRoutes as Record<
+            string,
+            OffenseCustomRouteTarget
           >) ?? {},
       }));
   } catch {
@@ -271,6 +321,11 @@ export default function TacticsPage() {
     playerId: string;
     pointerId: number;
   } | null>(null);
+  const dragCoverageZoneHandleRef = useRef<{
+    zoneId: string;
+    handle: ZoneHandleDirection;
+    pointerId: number;
+  } | null>(null);
 
   const [strokeColor, setStrokeColor] = useState("#ffffff");
   const [lineWidth, setLineWidth] = useState(4);
@@ -284,8 +339,17 @@ export default function TacticsPage() {
   const [defenseAssignmentTargets, setDefenseAssignmentTargets] = useState<
     Record<string, DefenseAssignmentTarget>
   >({});
+  const [offenseCustomRouteTargets, setOffenseCustomRouteTargets] = useState<
+    Record<string, OffenseCustomRouteTarget>
+  >({});
   const [savedPlays, setSavedPlays] = useState<SavedPlayRecord[]>([]);
   const [surfaceSize, setSurfaceSize] = useState({ width: 0, height: 0 });
+  const [coverageZoneOverrides, setCoverageZoneOverrides] = useState<
+    Record<string, EditableCoverageZoneRect>
+  >({});
+  const [selectedCoverageZoneId, setSelectedCoverageZoneId] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -543,6 +607,7 @@ export default function TacticsPage() {
 
     if (!nextValue) {
       setDefenseAssignmentTargets({});
+      setOffenseCustomRouteTargets({});
     }
   }, []);
 
@@ -552,7 +617,15 @@ export default function TacticsPage() {
         ...current,
         defense: {
           ...current.defense,
-          players: applyDefenseFormation(current.defense.players, formation),
+          players: applyDefenseFormation(
+            makeDefensePlayers().map(
+              (defaultPlayer) =>
+                current.defense.players.find(
+                  (player) => player.id === defaultPlayer.id,
+                ) ?? defaultPlayer,
+            ),
+            formation,
+          ),
         },
         settings: {
           ...current.settings,
@@ -611,6 +684,7 @@ export default function TacticsPage() {
             updatedAt,
             game,
             defenseAssignments: defenseAssignmentTargets,
+            offenseCustomRoutes: offenseCustomRouteTargets,
           },
           ...current,
         ].slice(0, MAX_SAVED_PLAYS),
@@ -618,7 +692,7 @@ export default function TacticsPage() {
 
       return { ok: true, message: `Play \"${trimmedName}\" saved.` };
     },
-    [defenseAssignmentTargets, game],
+    [defenseAssignmentTargets, game, offenseCustomRouteTargets],
   );
 
   const handleLoadSavedPlay = useCallback(
@@ -630,6 +704,7 @@ export default function TacticsPage() {
 
       setGame(match.game);
       setDefenseAssignmentTargets(match.defenseAssignments ?? {});
+      setOffenseCustomRouteTargets(match.offenseCustomRoutes ?? {});
       setSelectedPlayerRef(null);
 
       return { ok: true, message: `Loaded \"${match.name}\".` };
@@ -1013,7 +1088,9 @@ export default function TacticsPage() {
     : null;
 
   const selectedOffenseRoutePlayerId =
-    selectedPlayerRef?.teamKey === "offense" && selectedPlayer?.isEligible
+    selectedPlayerRef?.teamKey === "offense" &&
+    selectedPlayer?.isEligible &&
+    !offenseCustomRouteTargets[selectedPlayerRef.playerId]
       ? selectedPlayerRef.playerId
       : null;
 
@@ -1024,45 +1101,348 @@ export default function TacticsPage() {
   const touchdownZonePercent =
     (FIELD_PLAYABLE_START_YARD / TOTAL_FIELD_YARDS) * 100;
 
-  const renderedDefenseCoverageZones = defenseCoverageZones
-    .map((zone) => {
-      const zoneBottomAtNearSeam =
-        lineOfScrimmageTop - zone.topOffsetFromLosPercent;
-      const isDeepZone = zone.label.toLowerCase().startsWith("deep");
+  const renderedDefenseCoverageZones: RenderedDefenseCoverageZone[] =
+    defenseCoverageZones
+      .map((zone, zoneIndex) => {
+        const zoneId = `${game.settings.defenseCoverage}:${game.settings.nearZoneCount}:${zoneIndex}`;
+        const zoneBottomAtNearSeam =
+          lineOfScrimmageTop - zone.topOffsetFromLosPercent;
+        const isDeepZone = zone.label.toLowerCase().startsWith("deep");
 
-      if (isDeepZone) {
-        const deepZoneBottom = Math.max(
-          touchdownZonePercent,
-          zoneBottomAtNearSeam,
+        let computedZone: EditableCoverageZoneRect;
+        if (isDeepZone) {
+          const deepZoneBottom = Math.max(
+            touchdownZonePercent,
+            zoneBottomAtNearSeam,
+          );
+          computedZone = {
+            leftPercent: zone.leftPercent,
+            top: 0,
+            widthPercent: zone.widthPercent,
+            height: Math.max(0, deepZoneBottom),
+          };
+        } else {
+          const rawTop = Math.max(
+            0,
+            lineOfScrimmageTop -
+              zone.topOffsetFromLosPercent -
+              zone.heightPercent,
+          );
+          const rawHeight = Math.max(
+            0,
+            Math.min(zone.heightPercent, zoneBottomAtNearSeam),
+          );
+
+          computedZone = {
+            leftPercent: zone.leftPercent,
+            top: rawTop,
+            widthPercent: zone.widthPercent,
+            height: rawHeight,
+          };
+        }
+
+        const zoneRect = coverageZoneOverrides[zoneId] ?? computedZone;
+        const top = clamp(
+          zoneRect.top,
+          0,
+          Math.max(0, lineOfScrimmageTop - MIN_COVERAGE_ZONE_HEIGHT_PERCENT),
+        );
+        const height = clamp(
+          zoneRect.height,
+          MIN_COVERAGE_ZONE_HEIGHT_PERCENT,
+          Math.max(MIN_COVERAGE_ZONE_HEIGHT_PERCENT, lineOfScrimmageTop - top),
+        );
+        const leftPercent = clamp(
+          zoneRect.leftPercent,
+          0,
+          100 - MIN_COVERAGE_ZONE_WIDTH_PERCENT,
+        );
+        const widthPercent = clamp(
+          zoneRect.widthPercent,
+          MIN_COVERAGE_ZONE_WIDTH_PERCENT,
+          Math.max(MIN_COVERAGE_ZONE_WIDTH_PERCENT, 100 - leftPercent),
         );
 
         return {
           ...zone,
-          top: 0,
-          height: Math.max(0, deepZoneBottom),
+          id: zoneId,
+          leftPercent,
+          top,
+          widthPercent,
+          height,
         };
+      })
+      .filter((zone) => zone.height >= 1);
+
+  useEffect(() => {
+    if (!selectedCoverageZoneId) {
+      return;
+    }
+
+    const selectedZoneStillExists = renderedDefenseCoverageZones.some(
+      (zone) => zone.id === selectedCoverageZoneId,
+    );
+    if (!selectedZoneStillExists) {
+      setSelectedCoverageZoneId(null);
+    }
+  }, [renderedDefenseCoverageZones, selectedCoverageZoneId]);
+
+  const handleCoverageZoneLabelClick =
+    (zoneId: string) => (event: React.MouseEvent<HTMLSpanElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setSelectedCoverageZoneId(zoneId);
+    };
+
+  const updateCoverageZoneFromClient = useCallback(
+    (
+      zoneId: string,
+      handle: ZoneHandleDirection,
+      clientX: number,
+      clientY: number,
+    ) => {
+      const drawingSurface = drawingSurfaceRef.current;
+      if (!drawingSurface || isDrawEnabled) {
+        return;
       }
 
-      const rawTop = Math.max(
+      const rect = drawingSurface.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        return;
+      }
+
+      const pointerXPercent = clamp(
+        ((clientX - rect.left) / rect.width) * 100,
         0,
-        lineOfScrimmageTop - zone.topOffsetFromLosPercent - zone.heightPercent,
+        100,
       );
-      const rawHeight = Math.max(
+      const pointerYPercent = clamp(
+        ((clientY - rect.top) / rect.height) * 100,
         0,
-        Math.min(zone.heightPercent, zoneBottomAtNearSeam),
+        100,
       );
 
-      return {
-        ...zone,
-        top: rawTop,
-        height: rawHeight,
+      setCoverageZoneOverrides((current) => {
+        const renderedZone = renderedDefenseCoverageZones.find(
+          (zone) => zone.id === zoneId,
+        );
+        if (!renderedZone) {
+          return current;
+        }
+
+        const baseRect = current[zoneId] ?? {
+          leftPercent: renderedZone.leftPercent,
+          top: renderedZone.top,
+          widthPercent: renderedZone.widthPercent,
+          height: renderedZone.height,
+        };
+
+        const currentBottom = baseRect.top + baseRect.height;
+        const currentRight = baseRect.leftPercent + baseRect.widthPercent;
+        let nextRect = baseRect;
+
+        if (handle === "top") {
+          const nextTop = clamp(
+            pointerYPercent,
+            0,
+            currentBottom - MIN_COVERAGE_ZONE_HEIGHT_PERCENT,
+          );
+          nextRect = {
+            ...baseRect,
+            top: nextTop,
+            height: currentBottom - nextTop,
+          };
+        }
+
+        if (handle === "bottom") {
+          const nextBottom = clamp(
+            pointerYPercent,
+            baseRect.top + MIN_COVERAGE_ZONE_HEIGHT_PERCENT,
+            lineOfScrimmageTop,
+          );
+          nextRect = {
+            ...baseRect,
+            height: nextBottom - baseRect.top,
+          };
+        }
+
+        if (handle === "left") {
+          const nextLeft = clamp(
+            pointerXPercent,
+            0,
+            currentRight - MIN_COVERAGE_ZONE_WIDTH_PERCENT,
+          );
+          nextRect = {
+            ...baseRect,
+            leftPercent: nextLeft,
+            widthPercent: currentRight - nextLeft,
+          };
+        }
+
+        if (handle === "right") {
+          const nextRight = clamp(
+            pointerXPercent,
+            baseRect.leftPercent + MIN_COVERAGE_ZONE_WIDTH_PERCENT,
+            100,
+          );
+          nextRect = {
+            ...baseRect,
+            widthPercent: nextRight - baseRect.leftPercent,
+          };
+        }
+
+        const normalizedTop = clamp(
+          nextRect.top,
+          0,
+          Math.max(0, lineOfScrimmageTop - MIN_COVERAGE_ZONE_HEIGHT_PERCENT),
+        );
+        const normalizedHeight = clamp(
+          nextRect.height,
+          MIN_COVERAGE_ZONE_HEIGHT_PERCENT,
+          Math.max(
+            MIN_COVERAGE_ZONE_HEIGHT_PERCENT,
+            lineOfScrimmageTop - normalizedTop,
+          ),
+        );
+        const normalizedLeft = clamp(
+          nextRect.leftPercent,
+          0,
+          100 - MIN_COVERAGE_ZONE_WIDTH_PERCENT,
+        );
+        const normalizedWidth = clamp(
+          nextRect.widthPercent,
+          MIN_COVERAGE_ZONE_WIDTH_PERCENT,
+          Math.max(MIN_COVERAGE_ZONE_WIDTH_PERCENT, 100 - normalizedLeft),
+        );
+
+        const normalizedRect: EditableCoverageZoneRect = {
+          leftPercent: normalizedLeft,
+          top: normalizedTop,
+          widthPercent: normalizedWidth,
+          height: normalizedHeight,
+        };
+
+        const hasNoChange =
+          baseRect.leftPercent === normalizedRect.leftPercent &&
+          baseRect.top === normalizedRect.top &&
+          baseRect.widthPercent === normalizedRect.widthPercent &&
+          baseRect.height === normalizedRect.height;
+
+        if (hasNoChange) {
+          return current;
+        }
+
+        return {
+          ...current,
+          [zoneId]: normalizedRect,
+        };
+      });
+    },
+    [isDrawEnabled, lineOfScrimmageTop, renderedDefenseCoverageZones],
+  );
+
+  const handleCoverageZoneHandlePointerDown =
+    (zoneId: string, handle: ZoneHandleDirection) =>
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (isDrawEnabled || event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setSelectedCoverageZoneId(zoneId);
+      event.currentTarget.setPointerCapture(event.pointerId);
+      dragCoverageZoneHandleRef.current = {
+        zoneId,
+        handle,
+        pointerId: event.pointerId,
       };
-    })
-    .filter((zone) => zone.height >= 1);
+      updateCoverageZoneFromClient(
+        zoneId,
+        handle,
+        event.clientX,
+        event.clientY,
+      );
+    };
+
+  const handleCoverageZoneHandlePointerMove = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    const activeDrag = dragCoverageZoneHandleRef.current;
+    if (
+      !activeDrag ||
+      activeDrag.pointerId !== event.pointerId ||
+      isDrawEnabled
+    ) {
+      return;
+    }
+
+    updateCoverageZoneFromClient(
+      activeDrag.zoneId,
+      activeDrag.handle,
+      event.clientX,
+      event.clientY,
+    );
+  };
+
+  const handleCoverageZoneHandlePointerUp = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    const activeDrag = dragCoverageZoneHandleRef.current;
+    if (!activeDrag || activeDrag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    dragCoverageZoneHandleRef.current = null;
+  };
+
+  const selectedCoverageZone = selectedCoverageZoneId
+    ? (renderedDefenseCoverageZones.find(
+        (zone) => zone.id === selectedCoverageZoneId,
+      ) ?? null)
+    : null;
 
   const handleFieldPointerDown = (
     event: React.PointerEvent<HTMLDivElement>,
   ) => {
+    const targetElement = event.target as HTMLElement;
+    if (
+      selectedCoverageZone &&
+      !targetElement.closest("[data-coverage-zone-ui='true']")
+    ) {
+      const drawingSurface = drawingSurfaceRef.current;
+      if (drawingSurface) {
+        const rect = drawingSurface.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const xPercent = clamp(
+            ((event.clientX - rect.left) / rect.width) * 100,
+            0,
+            100,
+          );
+          const yPercent = clamp(
+            ((event.clientY - rect.top) / rect.height) * 100,
+            0,
+            100,
+          );
+          const isInsideSelectedCoverageZone =
+            xPercent >= selectedCoverageZone.leftPercent &&
+            xPercent <=
+              selectedCoverageZone.leftPercent +
+                selectedCoverageZone.widthPercent &&
+            yPercent >= selectedCoverageZone.top &&
+            yPercent <= selectedCoverageZone.top + selectedCoverageZone.height;
+
+          if (!isInsideSelectedCoverageZone) {
+            setSelectedCoverageZoneId(null);
+          }
+        }
+      }
+    }
+
     const isAssignmentModifierPressed = event.ctrlKey || event.metaKey;
     if (
       isDrawEnabled ||
@@ -1072,15 +1452,9 @@ export default function TacticsPage() {
       return;
     }
 
-    if (
-      !selectedPlayerRef ||
-      selectedPlayerRef.teamKey !== "defense" ||
-      event.button !== 0
-    ) {
+    if (!selectedPlayerRef || event.button !== 0) {
       return;
     }
-
-    const targetElement = event.target as HTMLElement;
     if (targetElement.closest("[data-player-node='true']")) {
       return;
     }
@@ -1105,6 +1479,77 @@ export default function TacticsPage() {
       0,
       100,
     );
+
+    if (selectedPlayerRef.teamKey === "offense") {
+      const selectedOffensePlayer = game.offense.players.find(
+        (player) => player.id === selectedPlayerRef.playerId && player.isActive,
+      );
+      if (!selectedOffensePlayer) {
+        return;
+      }
+
+      const playerLanePercent = clamp(
+        selectedOffensePlayer.lanePercent + formationShiftPercent,
+        4,
+        96,
+      );
+      const playerRelativeFieldYard = getRenderedRelativeFieldYard(
+        game.settings.lineOfScrimmageYard,
+        selectedOffensePlayer.depthFromLos,
+      );
+      const playerTopPercent = toTopPercentFromPlayableYard(
+        playerRelativeFieldYard,
+      );
+
+      let deltaXPercent = clamp(xPercent - playerLanePercent, -50, 50);
+      let deltaYPercent = clamp(yPercent - playerTopPercent, -50, 50);
+
+      if (!selectedOffensePlayer.isEligible) {
+        const deltaXPx = (deltaXPercent / 100) * rect.width;
+        const deltaYPx = (deltaYPercent / 100) * rect.height;
+        const distancePx = Math.hypot(deltaXPx, deltaYPx);
+        const maxBlockYards =
+          deltaYPx > 0 ? MAX_PULL_BLOCK_YARDS : MAX_INELIGIBLE_BLOCK_YARDS;
+        const maxDistancePx = (maxBlockYards / TOTAL_FIELD_YARDS) * rect.height;
+
+        if (distancePx > maxDistancePx && distancePx > 0.001) {
+          const ratio = maxDistancePx / distancePx;
+          deltaXPercent *= ratio;
+          deltaYPercent *= ratio;
+        }
+      }
+
+      setOffenseCustomRouteTargets((current) => ({
+        ...current,
+        [selectedPlayerRef.playerId]: {
+          deltaXPercent,
+          deltaYPercent,
+        },
+      }));
+
+      // Custom route overrides the predefined route for this player.
+      setGame((current) => ({
+        ...current,
+        offense: {
+          ...current.offense,
+          players: current.offense.players.map((player) =>
+            player.id === selectedPlayerRef.playerId
+              ? {
+                  ...player,
+                  routeId: null,
+                  routeExtension: 0,
+                  routeBreakExtension: 0,
+                }
+              : player,
+          ),
+        },
+      }));
+      return;
+    }
+
+    if (selectedPlayerRef.teamKey !== "defense") {
+      return;
+    }
 
     const zoneIndex = renderedDefenseCoverageZones.findIndex(
       (zone) =>
@@ -1178,6 +1623,16 @@ export default function TacticsPage() {
             ),
           },
         }));
+
+        setOffenseCustomRouteTargets((currentTargets) => {
+          if (!(currentSelection.playerId in currentTargets)) {
+            return currentTargets;
+          }
+
+          const nextTargets = { ...currentTargets };
+          delete nextTargets[currentSelection.playerId];
+          return nextTargets;
+        });
 
         return currentSelection;
       });
@@ -1489,7 +1944,10 @@ export default function TacticsPage() {
       ? game.offense.players
           .filter(
             (player) =>
-              player.isActive && player.isEligible && player.routeId !== null,
+              player.isActive &&
+              player.isEligible &&
+              player.routeId !== null &&
+              !offenseCustomRouteTargets[player.id],
           )
           .map((player) => {
             const relativeFieldYard = getRenderedRelativeFieldYard(
@@ -1640,6 +2098,158 @@ export default function TacticsPage() {
           )
       : [];
 
+  const offenseCustomRouteOverlays: OffenseCustomRouteOverlay[] =
+    surfaceSize.width > 0 && surfaceSize.height > 0
+      ? game.offense.players
+          .filter((player) => player.isActive)
+          .map((player) => {
+            const target = offenseCustomRouteTargets[player.id];
+            if (!target) {
+              return null;
+            }
+
+            const relativeFieldYard = getRenderedRelativeFieldYard(
+              game.settings.lineOfScrimmageYard,
+              player.depthFromLos,
+            );
+            const lanePercent = clamp(
+              player.lanePercent + formationShiftPercent,
+              4,
+              96,
+            );
+            const topPercent = toTopPercentFromPlayableYard(relativeFieldYard);
+            let deltaXPercent = target.deltaXPercent;
+            let deltaYPercent = target.deltaYPercent;
+
+            if (!player.isEligible) {
+              const deltaXPx = (deltaXPercent / 100) * surfaceSize.width;
+              const deltaYPx = (deltaYPercent / 100) * surfaceSize.height;
+              const distancePx = Math.hypot(deltaXPx, deltaYPx);
+              const maxBlockYards =
+                deltaYPx > 0
+                  ? MAX_PULL_BLOCK_YARDS
+                  : MAX_INELIGIBLE_BLOCK_YARDS;
+              const maxDistancePx =
+                (maxBlockYards / TOTAL_FIELD_YARDS) * surfaceSize.height;
+
+              if (distancePx > maxDistancePx && distancePx > 0.001) {
+                const ratio = maxDistancePx / distancePx;
+                deltaXPercent *= ratio;
+                deltaYPercent *= ratio;
+              }
+            }
+
+            const endXPercent = clamp(lanePercent + deltaXPercent, 0, 100);
+            const endYPercent = clamp(topPercent + deltaYPercent, 0, 100);
+            const startX = (lanePercent / 100) * surfaceSize.width;
+            const startY = (topPercent / 100) * surfaceSize.height;
+            const draggedEndX = (endXPercent / 100) * surfaceSize.width;
+            const draggedEndY = (endYPercent / 100) * surfaceSize.height;
+            let endX = draggedEndX;
+            let endY = draggedEndY;
+            let isPullBlock = false;
+            let pathData: string | null = null;
+            let capStartX: number | null = null;
+            let capStartY: number | null = null;
+            let capEndX: number | null = null;
+            let capEndY: number | null = null;
+
+            if (!player.isEligible) {
+              const maxBlockYards =
+                draggedEndY > startY
+                  ? MAX_PULL_BLOCK_YARDS
+                  : MAX_INELIGIBLE_BLOCK_YARDS;
+              const maxDistancePx =
+                (maxBlockYards / TOTAL_FIELD_YARDS) * surfaceSize.height;
+              const draggedDx = draggedEndX - startX;
+              const draggedDy = draggedEndY - startY;
+              const backwardDepthPx = Math.max(0, draggedDy);
+
+              if (backwardDepthPx > 2) {
+                isPullBlock = true;
+
+                const forwardReturnY = clamp(
+                  -Math.max(
+                    10,
+                    Math.min(maxDistancePx * 0.3, backwardDepthPx * 0.45),
+                  ),
+                  -maxDistancePx,
+                  0,
+                );
+                const desiredFinalDx = draggedDx * 0.85;
+                const desiredFinalDy = forwardReturnY;
+                const desiredFinalDistance = Math.hypot(
+                  desiredFinalDx,
+                  desiredFinalDy,
+                );
+                const finalScale =
+                  desiredFinalDistance > maxDistancePx &&
+                  desiredFinalDistance > 0.001
+                    ? maxDistancePx / desiredFinalDistance
+                    : 1;
+
+                endX = startX + desiredFinalDx * finalScale;
+                endY = startY + desiredFinalDy * finalScale;
+
+                const control1X = startX + draggedDx * 0.2;
+                const control1Y = startY + backwardDepthPx * 0.95;
+                const control2X = startX + draggedDx * 0.95;
+                const control2Y = startY + backwardDepthPx * 0.9;
+                pathData = `M ${startX} ${startY} C ${control1X} ${control1Y}, ${control2X} ${control2Y}, ${endX} ${endY}`;
+
+                const tangentX = endX - control2X;
+                const tangentY = endY - control2Y;
+                const tangentLength = Math.hypot(tangentX, tangentY);
+
+                if (tangentLength > 0.001) {
+                  const perpendicularX = -tangentY / tangentLength;
+                  const perpendicularY = tangentX / tangentLength;
+                  capStartX = endX - perpendicularX * INELIGIBLE_BLOCK_T_CAP_PX;
+                  capStartY = endY - perpendicularY * INELIGIBLE_BLOCK_T_CAP_PX;
+                  capEndX = endX + perpendicularX * INELIGIBLE_BLOCK_T_CAP_PX;
+                  capEndY = endY + perpendicularY * INELIGIBLE_BLOCK_T_CAP_PX;
+                }
+              }
+
+              const dx = endX - startX;
+              const dy = endY - startY;
+              const distance = Math.hypot(dx, dy);
+
+              if (!isPullBlock && distance > 0.001) {
+                const perpendicularX = -dy / distance;
+                const perpendicularY = dx / distance;
+                capStartX = endX - perpendicularX * INELIGIBLE_BLOCK_T_CAP_PX;
+                capStartY = endY - perpendicularY * INELIGIBLE_BLOCK_T_CAP_PX;
+                capEndX = endX + perpendicularX * INELIGIBLE_BLOCK_T_CAP_PX;
+                capEndY = endY + perpendicularY * INELIGIBLE_BLOCK_T_CAP_PX;
+              } else if (!isPullBlock) {
+                capStartX = endX;
+                capStartY = endY - INELIGIBLE_BLOCK_T_CAP_PX;
+                capEndX = endX;
+                capEndY = endY + INELIGIBLE_BLOCK_T_CAP_PX;
+              }
+            }
+
+            return {
+              playerId: player.id,
+              startX,
+              startY,
+              endX,
+              endY,
+              isEligible: player.isEligible,
+              isPullBlock,
+              pathData,
+              capStartX,
+              capStartY,
+              capEndX,
+              capEndY,
+            };
+          })
+          .filter(
+            (overlay): overlay is OffenseCustomRouteOverlay => overlay !== null,
+          )
+      : [];
+
   const renderTeamPlayers = (team: Team, teamKey: TeamKey) =>
     team.players
       .filter((player) => player.isActive)
@@ -1670,7 +2280,7 @@ export default function TacticsPage() {
             onDoubleClick={handlePlayerDoubleClick(teamKey, player.id)}
           >
             <div
-              className={`flex h-6 w-6 items-center justify-center rounded-full border border-white/80 text-[9px] font-bold tracking-tight shadow ${isOffenseOnLos ? "text-black" : "text-white"} ${team.colorClass} ${isDrawEnabled ? "" : "cursor-grab active:cursor-grabbing"}`}
+              className={`flex h-6 w-6 items-center justify-center rounded-full border border-white/80 text-[9px] font-bold tracking-tight shadow ${isOffenseOnLos ? "text-black" : "text-white"} ${team.colorClass} ${isDrawEnabled ? "" : game.settings.playersLocked ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"}`}
               title={`${team.name} ${player.role}`}
             >
               {player.role}
@@ -1724,6 +2334,13 @@ export default function TacticsPage() {
             role: selectedPlayer.role,
             isEligible: selectedPlayer.isEligible,
             routeId: selectedPlayer.routeId,
+            hasCustomRoute: !!offenseCustomRouteTargets[selectedPlayer.id],
+            coordX: clamp(
+              selectedPlayer.lanePercent + formationShiftPercent,
+              4,
+              96,
+            ),
+            coordY: selectedPlayer.depthFromLos,
           }
         : null,
     onSelectedPlayerLabelChange: handleSelectedPlayerLabelChange,
@@ -1733,7 +2350,7 @@ export default function TacticsPage() {
   return (
     <DrawingProvider value={drawingContextValue}>
       <GameStateProvider value={gameStateContextValue}>
-        <main className="min-h-screen bg-slate-950 p-4 text-slate-100 md:p-6">
+        <main className="min-h-screen select-none bg-slate-950 p-4 text-slate-100 md:p-6">
           <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 lg:h-[calc(100vh-3rem)] lg:flex-row">
             <section
               aria-label="Football tactics field"
@@ -1800,23 +2417,108 @@ export default function TacticsPage() {
                     style={{ top: `${lineOfScrimmageTop}%` }}
                   />
 
-                  {renderedDefenseCoverageZones.map((zone, index) => (
-                    <div
-                      key={`coverage-zone-${game.settings.defenseCoverage}-${index}`}
-                      className="pointer-events-none absolute z-[12]"
-                      style={{
-                        left: `${zone.leftPercent}%`,
-                        top: `${zone.top}%`,
-                        width: `${zone.widthPercent}%`,
-                        height: `${zone.height}%`,
-                        border: "2px dashed #b67bff",
-                      }}
-                    >
-                      <span className="absolute left-1/2 top-1 -translate-x-1/2 whitespace-nowrap rounded bg-slate-900/85 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#d9b8ff]">
-                        {zone.label}
-                      </span>
-                    </div>
-                  ))}
+                  {renderedDefenseCoverageZones.map((zone, index) => {
+                    const isSelected = zone.id === selectedCoverageZoneId;
+                    return (
+                      <div
+                        key={`coverage-zone-${game.settings.defenseCoverage}-${index}`}
+                        className="pointer-events-none absolute z-[12]"
+                        style={{
+                          left: `${zone.leftPercent}%`,
+                          top: `${zone.top}%`,
+                          width: `${zone.widthPercent}%`,
+                          height: `${zone.height}%`,
+                          border: isSelected
+                            ? "2px solid #f59e0b"
+                            : "2px dashed #b67bff",
+                        }}
+                      >
+                        <span
+                          data-coverage-zone-ui="true"
+                          className={`pointer-events-auto absolute left-1/2 top-1 -translate-x-1/2 whitespace-nowrap rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isSelected ? "cursor-default bg-amber-700/90 text-amber-100" : "cursor-pointer bg-slate-900/85 text-[#d9b8ff]"}`}
+                          onClick={handleCoverageZoneLabelClick(zone.id)}
+                        >
+                          {zone.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                  {selectedCoverageZone ? (
+                    <>
+                      <div
+                        data-coverage-zone-ui="true"
+                        className={`absolute z-[44] h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-100 bg-amber-500 ${isDrawEnabled ? "pointer-events-none" : "pointer-events-auto cursor-ns-resize"}`}
+                        style={{
+                          left: `${selectedCoverageZone.leftPercent + selectedCoverageZone.widthPercent / 2}%`,
+                          top: `${selectedCoverageZone.top}%`,
+                        }}
+                        onPointerDown={handleCoverageZoneHandlePointerDown(
+                          selectedCoverageZone.id,
+                          "top",
+                        )}
+                        onPointerMove={handleCoverageZoneHandlePointerMove}
+                        onPointerUp={handleCoverageZoneHandlePointerUp}
+                        onPointerCancel={handleCoverageZoneHandlePointerUp}
+                        onPointerLeave={handleCoverageZoneHandlePointerUp}
+                        title="Drag top edge"
+                      />
+
+                      <div
+                        data-coverage-zone-ui="true"
+                        className={`absolute z-[44] h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-100 bg-amber-500 ${isDrawEnabled ? "pointer-events-none" : "pointer-events-auto cursor-ns-resize"}`}
+                        style={{
+                          left: `${selectedCoverageZone.leftPercent + selectedCoverageZone.widthPercent / 2}%`,
+                          top: `${selectedCoverageZone.top + selectedCoverageZone.height}%`,
+                        }}
+                        onPointerDown={handleCoverageZoneHandlePointerDown(
+                          selectedCoverageZone.id,
+                          "bottom",
+                        )}
+                        onPointerMove={handleCoverageZoneHandlePointerMove}
+                        onPointerUp={handleCoverageZoneHandlePointerUp}
+                        onPointerCancel={handleCoverageZoneHandlePointerUp}
+                        onPointerLeave={handleCoverageZoneHandlePointerUp}
+                        title="Drag bottom edge"
+                      />
+
+                      <div
+                        data-coverage-zone-ui="true"
+                        className={`absolute z-[44] h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-100 bg-amber-500 ${isDrawEnabled ? "pointer-events-none" : "pointer-events-auto cursor-ew-resize"}`}
+                        style={{
+                          left: `${selectedCoverageZone.leftPercent}%`,
+                          top: `${selectedCoverageZone.top + selectedCoverageZone.height / 2}%`,
+                        }}
+                        onPointerDown={handleCoverageZoneHandlePointerDown(
+                          selectedCoverageZone.id,
+                          "left",
+                        )}
+                        onPointerMove={handleCoverageZoneHandlePointerMove}
+                        onPointerUp={handleCoverageZoneHandlePointerUp}
+                        onPointerCancel={handleCoverageZoneHandlePointerUp}
+                        onPointerLeave={handleCoverageZoneHandlePointerUp}
+                        title="Drag left edge"
+                      />
+
+                      <div
+                        data-coverage-zone-ui="true"
+                        className={`absolute z-[44] h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-100 bg-amber-500 ${isDrawEnabled ? "pointer-events-none" : "pointer-events-auto cursor-ew-resize"}`}
+                        style={{
+                          left: `${selectedCoverageZone.leftPercent + selectedCoverageZone.widthPercent}%`,
+                          top: `${selectedCoverageZone.top + selectedCoverageZone.height / 2}%`,
+                        }}
+                        onPointerDown={handleCoverageZoneHandlePointerDown(
+                          selectedCoverageZone.id,
+                          "right",
+                        )}
+                        onPointerMove={handleCoverageZoneHandlePointerMove}
+                        onPointerUp={handleCoverageZoneHandlePointerUp}
+                        onPointerCancel={handleCoverageZoneHandlePointerUp}
+                        onPointerLeave={handleCoverageZoneHandlePointerUp}
+                        title="Drag right edge"
+                      />
+                    </>
+                  ) : null}
 
                   <div
                     className={`absolute z-20 ${isDrawEnabled ? "pointer-events-none" : "pointer-events-auto"}`}
@@ -1875,6 +2577,17 @@ export default function TacticsPage() {
                         <path d="M 0 0 L 10 5 L 0 10 z" fill="#000000" />
                       </marker>
                       <marker
+                        id="offense-custom-route-arrow"
+                        viewBox="0 0 10 10"
+                        refX="9"
+                        refY="5"
+                        markerWidth="6"
+                        markerHeight="6"
+                        orient="auto"
+                      >
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#000000" />
+                      </marker>
+                      <marker
                         id="defense-assignment-arrow"
                         viewBox="0 0 10 10"
                         refX="9"
@@ -1899,6 +2612,51 @@ export default function TacticsPage() {
                         strokeLinecap="round"
                         markerEnd="url(#defense-assignment-arrow)"
                       />
+                    ))}
+
+                    {offenseCustomRouteOverlays.map((route) => (
+                      <g key={`offense-custom-route-${route.playerId}`}>
+                        {route.isPullBlock && route.pathData ? (
+                          <path
+                            d={route.pathData}
+                            fill="none"
+                            stroke="#000000"
+                            strokeWidth={3}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        ) : (
+                          <line
+                            x1={route.startX}
+                            y1={route.startY}
+                            x2={route.endX}
+                            y2={route.endY}
+                            stroke="#000000"
+                            strokeWidth={3}
+                            strokeLinecap="round"
+                            markerEnd={
+                              route.isEligible
+                                ? "url(#offense-custom-route-arrow)"
+                                : undefined
+                            }
+                          />
+                        )}
+                        {!route.isEligible &&
+                        route.capStartX !== null &&
+                        route.capStartY !== null &&
+                        route.capEndX !== null &&
+                        route.capEndY !== null ? (
+                          <line
+                            x1={route.capStartX}
+                            y1={route.capStartY}
+                            x2={route.capEndX}
+                            y2={route.capEndY}
+                            stroke="#000000"
+                            strokeWidth={3}
+                            strokeLinecap="round"
+                          />
+                        ) : null}
+                      </g>
                     ))}
 
                     {routeOverlays.map((route) => (
