@@ -73,6 +73,97 @@ export type OffenseCustomRouteOverlay = {
 
 type SurfaceSize = { width: number; height: number };
 
+type DefenseCoverageZoneInput = {
+  leftPercent: number;
+  widthPercent: number;
+  topOffsetFromLosPercent: number;
+  heightPercent: number;
+  label: string;
+};
+
+export const computeRenderedCoverageZones = (
+  defenseCoverageZones: DefenseCoverageZoneInput[],
+  defenseCoverageId: DefenseCoverageId,
+  nearZoneCount: number,
+  lineOfScrimmageTop: number,
+  touchdownZonePercent: number,
+  coverageZoneOverrides: Record<string, EditableCoverageZoneRect>,
+  minCoverageZoneHeightPercent: number,
+  minCoverageZoneWidthPercent: number,
+): RenderedDefenseCoverageZone[] => {
+  return defenseCoverageZones
+    .map((zone, zoneIndex) => {
+      const zoneId = `${defenseCoverageId}:${nearZoneCount}:${zoneIndex}`;
+      const zoneBottomAtNearSeam =
+        lineOfScrimmageTop - zone.topOffsetFromLosPercent;
+      const isDeepZone = zone.label.toLowerCase().startsWith("deep");
+
+      let computedZone: EditableCoverageZoneRect;
+      if (isDeepZone) {
+        const deepZoneBottom = Math.max(
+          touchdownZonePercent,
+          zoneBottomAtNearSeam,
+        );
+        computedZone = {
+          leftPercent: zone.leftPercent,
+          top: 0,
+          widthPercent: zone.widthPercent,
+          height: Math.max(0, deepZoneBottom),
+        };
+      } else {
+        const rawTop = Math.max(
+          0,
+          lineOfScrimmageTop -
+            zone.topOffsetFromLosPercent -
+            zone.heightPercent,
+        );
+        const rawHeight = Math.max(
+          0,
+          Math.min(zone.heightPercent, zoneBottomAtNearSeam),
+        );
+
+        computedZone = {
+          leftPercent: zone.leftPercent,
+          top: rawTop,
+          widthPercent: zone.widthPercent,
+          height: rawHeight,
+        };
+      }
+
+      const zoneRect = coverageZoneOverrides[zoneId] ?? computedZone;
+      const top = clamp(
+        zoneRect.top,
+        0,
+        Math.max(0, lineOfScrimmageTop - minCoverageZoneHeightPercent),
+      );
+      const height = clamp(
+        zoneRect.height,
+        minCoverageZoneHeightPercent,
+        Math.max(minCoverageZoneHeightPercent, lineOfScrimmageTop - top),
+      );
+      const leftPercent = clamp(
+        zoneRect.leftPercent,
+        0,
+        100 - minCoverageZoneWidthPercent,
+      );
+      const widthPercent = clamp(
+        zoneRect.widthPercent,
+        minCoverageZoneWidthPercent,
+        Math.max(minCoverageZoneWidthPercent, 100 - leftPercent),
+      );
+
+      return {
+        ...zone,
+        id: zoneId,
+        leftPercent,
+        top,
+        widthPercent,
+        height,
+      };
+    })
+    .filter((zone) => zone.height >= 1);
+};
+
 export const computeRouteOverlays = (
   offensePlayers: Player[],
   offenseCustomRouteTargets: Record<string, OffenseCustomRouteTarget>,
