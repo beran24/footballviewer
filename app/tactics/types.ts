@@ -62,7 +62,8 @@ export type DefenseCoverageId =
   | "cover-2"
   | "cover-3"
   | "cover-4"
-  | "cover-6";
+  | "cover-6"
+  | "palms";
 
 export type NearZoneCount = 3 | 4 | 5;
 

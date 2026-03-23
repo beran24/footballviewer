@@ -26,6 +26,7 @@ export const defenseCoverageOptions: DefenseCoverageOption[] = [
   { id: "cover-3", label: "Cover 3" },
   { id: "cover-4", label: "Cover 4" },
   { id: "cover-6", label: "Cover 6" },
+  { id: "palms", label: "Palms (Cover 2 Read)" },
 ];
 
 export const nearZoneCountOptions: NearZoneCountOption[] = [
@@ -238,6 +239,36 @@ const coverageZonesById: Record<DefenseCoverageId, CoverageZoneRect[]> = {
       widthPercent: 25,
       heightPercent: 22,
       label: "Deep 1/4 R",
+    },
+  ],
+  palms: [
+    {
+      leftPercent: 0,
+      topOffsetFromLosPercent: 0,
+      widthPercent: 25,
+      heightPercent: 0,
+      label: "Deep 1/4 R",
+    },
+    {
+      leftPercent: 25,
+      topOffsetFromLosPercent: 0,
+      widthPercent: 25,
+      heightPercent: 0,
+      label: "Deep 1/4 RM",
+    },
+    {
+      leftPercent: 50,
+      topOffsetFromLosPercent: 0,
+      widthPercent: 25,
+      heightPercent: 0,
+      label: "Deep 1/4 LM",
+    },
+    {
+      leftPercent: 75,
+      topOffsetFromLosPercent: 0,
+      widthPercent: 25,
+      heightPercent: 0,
+      label: "Deep 1/4 L",
     },
   ],
 };

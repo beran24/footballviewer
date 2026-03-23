@@ -9,11 +9,10 @@ import {
   HASH_RIGHT_PERCENT,
   MAX_RELATIVE_FIELD_YARD,
   PLAYER_COLLISION_MIN_DISTANCE_PX,
-  MIN_RENDERED_DISTANCE_FROM_LOS_YARDS,
-  PLAYER_VERTICAL_SPREAD_FACTOR,
   MIN_PLAYER_DISTANCE_FROM_LOS_YARDS,
   MIN_RELATIVE_FIELD_YARD,
   PLAYABLE_FIELD_YARDS,
+  PLAYER_VERTICAL_SPREAD_FACTOR,
   TOTAL_FIELD_YARDS,
   YARD_LINE_INTERVAL,
   clamp,
@@ -42,263 +41,37 @@ import type {
   Team,
   TeamKey,
 } from "./types";
-
-type RoutePoint = {
-  x: number;
-  y: number;
-};
-
-type RouteOverlay = {
-  id: string;
-  points: RoutePoint[];
-  tip: RoutePoint;
-  breakPoint: RoutePoint | null;
-};
-
-type DefenseAssignmentTarget = {
-  coverageId: DefenseCoverageId;
-  zoneIndex: number;
-};
-
-type DefenseAssignmentOverlay = {
-  playerId: string;
-  startX: number;
-  startY: number;
-  endX: number;
-  endY: number;
-};
-
-type OffenseCustomRouteTarget = {
-  deltaXPercent: number;
-  deltaYPercent: number;
-};
-
-type OffenseCustomRouteOverlay = {
-  playerId: string;
-  startX: number;
-  startY: number;
-  endX: number;
-  endY: number;
-  isEligible: boolean;
-  isPullBlock: boolean;
-  pathData: string | null;
-  capStartX: number | null;
-  capStartY: number | null;
-  capEndX: number | null;
-  capEndY: number | null;
-};
+import {
+  parseSavedPlays,
+  SAVED_PLAYS_STORAGE_KEY,
+  MAX_SAVED_PLAYS,
+  type DefenseAssignmentTarget,
+  type OffenseCustomRouteTarget,
+  type SavedPlayRecord,
+} from "./utils/savedPlays";
+import {
+  getRenderedRelativeFieldYard,
+  getCommonRoutePoints,
+} from "./utils/fieldGeometry";
+import {
+  computeRouteOverlays,
+  computeDefensePlayerEllipseOverlays,
+  computeDefenseAssignmentOverlays,
+  computeOffenseCustomRouteOverlays,
+  MAX_PULL_BLOCK_YARDS,
+  MAX_INELIGIBLE_BLOCK_YARDS,
+  type RouteOverlay,
+  type DefensePlayerEllipseOverlay,
+  type DefenseAssignmentOverlay,
+  type OffenseCustomRouteOverlay,
+  type EditableCoverageZoneRect,
+  type RenderedDefenseCoverageZone,
+} from "./utils/overlays";
 
 type ZoneHandleDirection = "top" | "bottom" | "left" | "right";
 
-type EditableCoverageZoneRect = {
-  leftPercent: number;
-  top: number;
-  widthPercent: number;
-  height: number;
-};
-
-type RenderedDefenseCoverageZone = EditableCoverageZoneRect & {
-  id: string;
-  label: string;
-  topOffsetFromLosPercent: number;
-};
-
-type SavedPlayRecord = {
-  id: string;
-  name: string;
-  updatedAt: string;
-  game: GameState;
-  defenseAssignments: Record<string, DefenseAssignmentTarget>;
-  offenseCustomRoutes: Record<string, OffenseCustomRouteTarget>;
-};
-
-const SAVED_PLAYS_STORAGE_KEY = "footballviewer.tactics.savedPlays.v1";
-const MAX_SAVED_PLAYS = 50;
 const MIN_COVERAGE_ZONE_HEIGHT_PERCENT = 2;
 const MIN_COVERAGE_ZONE_WIDTH_PERCENT = 4;
-const MAX_INELIGIBLE_BLOCK_YARDS = 10;
-const MAX_PULL_BLOCK_YARDS = 25;
-const INELIGIBLE_BLOCK_T_CAP_PX = 7;
-
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
-const isNearZoneCount = (value: unknown): value is NearZoneCount =>
-  value === 3 || value === 4 || value === 5;
-
-const isPlayableGameState = (value: unknown): value is GameState => {
-  if (!isObject(value)) {
-    return false;
-  }
-
-  const offense = value.offense;
-  const defense = value.defense;
-  const settings = value.settings;
-  if (!isObject(offense) || !isObject(defense) || !isObject(settings)) {
-    return false;
-  }
-
-  return (
-    Array.isArray(offense.players) &&
-    Array.isArray(defense.players) &&
-    typeof settings.lineOfScrimmageYard === "number" &&
-    typeof settings.ballPlayableYard === "number" &&
-    typeof settings.ballXPercent === "number" &&
-    typeof settings.offenseFormation === "string" &&
-    typeof settings.defenseFormation === "string" &&
-    typeof settings.defenseCoverage === "string" &&
-    isNearZoneCount(settings.nearZoneCount) &&
-    typeof settings.qbUnderGun === "boolean" &&
-    typeof settings.playersLocked === "boolean"
-  );
-};
-
-const parseSavedPlays = (rawValue: string | null): SavedPlayRecord[] => {
-  if (!rawValue) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(rawValue);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed
-      .filter((entry) => {
-        if (!isObject(entry)) {
-          return false;
-        }
-
-        const defenseAssignmentCandidate = entry.defenseAssignments;
-        const offenseCustomRouteCandidate = entry.offenseCustomRoutes;
-        return (
-          typeof entry.id === "string" &&
-          typeof entry.name === "string" &&
-          typeof entry.updatedAt === "string" &&
-          isPlayableGameState(entry.game) &&
-          (defenseAssignmentCandidate === undefined ||
-            isObject(defenseAssignmentCandidate)) &&
-          (offenseCustomRouteCandidate === undefined ||
-            isObject(offenseCustomRouteCandidate))
-        );
-      })
-      .map((entry) => ({
-        id: entry.id as string,
-        name: entry.name as string,
-        updatedAt: entry.updatedAt as string,
-        game: entry.game as GameState,
-        defenseAssignments:
-          (entry.defenseAssignments as Record<
-            string,
-            DefenseAssignmentTarget
-          >) ?? {},
-        offenseCustomRoutes:
-          (entry.offenseCustomRoutes as Record<
-            string,
-            OffenseCustomRouteTarget
-          >) ?? {},
-      }));
-  } catch {
-    return [];
-  }
-};
-
-const getCommonRoutePoints = (
-  routeId: RouteId,
-  startX: number,
-  startY: number,
-  fieldWidth: number,
-  fieldHeight: number,
-): RoutePoint[] => {
-  const outsideSign = startX < fieldWidth / 2 ? -1 : 1;
-  const insideSign = -outsideSign;
-  const shortStem = fieldHeight * 0.11;
-  const mediumStem = fieldHeight * 0.16;
-  const deepStem = fieldHeight * 0.23;
-  const shortBreak = fieldWidth * 0.11;
-  const mediumBreak = fieldWidth * 0.16;
-
-  if (routeId === "quick-out") {
-    return [
-      { x: startX, y: startY },
-      { x: startX, y: startY - shortStem },
-      { x: startX + outsideSign * shortBreak, y: startY - shortStem },
-    ];
-  }
-
-  if (routeId === "slant") {
-    return [
-      { x: startX, y: startY },
-      {
-        x: startX + insideSign * mediumBreak,
-        y: startY - mediumStem,
-      },
-    ];
-  }
-
-  if (routeId === "comeback") {
-    return [
-      { x: startX, y: startY },
-      { x: startX, y: startY - deepStem },
-      {
-        x: startX + insideSign * shortBreak,
-        y: startY - deepStem + shortStem * 0.45,
-      },
-    ];
-  }
-
-  if (routeId === "curl") {
-    return [
-      { x: startX, y: startY },
-      { x: startX, y: startY - mediumStem },
-      { x: startX, y: startY - mediumStem + shortStem * 0.45 },
-    ];
-  }
-
-  if (routeId === "square-out") {
-    return [
-      { x: startX, y: startY },
-      { x: startX, y: startY - mediumStem },
-      { x: startX + outsideSign * mediumBreak, y: startY - mediumStem },
-    ];
-  }
-
-  if (routeId === "square-in") {
-    return [
-      { x: startX, y: startY },
-      { x: startX, y: startY - mediumStem },
-      { x: startX + insideSign * mediumBreak, y: startY - mediumStem },
-    ];
-  }
-
-  if (routeId === "corner") {
-    return [
-      { x: startX, y: startY },
-      { x: startX, y: startY - mediumStem },
-      {
-        x: startX + outsideSign * mediumBreak,
-        y: startY - deepStem,
-      },
-    ];
-  }
-
-  if (routeId === "post") {
-    return [
-      { x: startX, y: startY },
-      { x: startX, y: startY - mediumStem },
-      {
-        x: startX + insideSign * mediumBreak,
-        y: startY - deepStem,
-      },
-    ];
-  }
-
-  return [
-    { x: startX, y: startY },
-    { x: startX, y: startY - deepStem - shortStem },
-  ];
-};
 
 export default function TacticsPage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -338,6 +111,9 @@ export default function TacticsPage() {
   } | null>(null);
   const [defenseAssignmentTargets, setDefenseAssignmentTargets] = useState<
     Record<string, DefenseAssignmentTarget>
+  >({});
+  const [defensePlayerTargets, setDefensePlayerTargets] = useState<
+    Record<string, string>
   >({});
   const [offenseCustomRouteTargets, setOffenseCustomRouteTargets] = useState<
     Record<string, OffenseCustomRouteTarget>
@@ -607,6 +383,7 @@ export default function TacticsPage() {
 
     if (!nextValue) {
       setDefenseAssignmentTargets({});
+      setDefensePlayerTargets({});
       setOffenseCustomRouteTargets({});
     }
   }, []);
@@ -685,6 +462,7 @@ export default function TacticsPage() {
             game,
             defenseAssignments: defenseAssignmentTargets,
             offenseCustomRoutes: offenseCustomRouteTargets,
+            defensePlayerAssignments: defensePlayerTargets,
           },
           ...current,
         ].slice(0, MAX_SAVED_PLAYS),
@@ -704,6 +482,7 @@ export default function TacticsPage() {
 
       setGame(match.game);
       setDefenseAssignmentTargets(match.defenseAssignments ?? {});
+      setDefensePlayerTargets(match.defensePlayerAssignments ?? {});
       setOffenseCustomRouteTargets(match.offenseCustomRoutes ?? {});
       setSelectedPlayerRef(null);
 
@@ -821,23 +600,6 @@ export default function TacticsPage() {
 
   const formationShiftPercent =
     game.settings.ballXPercent - (HASH_LEFT_PERCENT + HASH_RIGHT_PERCENT) / 2;
-
-  const getRenderedRelativeFieldYard = useCallback(
-    (los: number, depthFromLos: number) => {
-      const direction = depthFromLos >= 0 ? 1 : -1;
-      const renderedDepthYards = Math.max(
-        Math.abs(depthFromLos) * PLAYER_VERTICAL_SPREAD_FACTOR,
-        MIN_RENDERED_DISTANCE_FROM_LOS_YARDS,
-      );
-
-      return clamp(
-        los + direction * renderedDepthYards,
-        MIN_RELATIVE_FIELD_YARD,
-        MAX_RELATIVE_FIELD_YARD,
-      );
-    },
-    [],
-  );
 
   const updateDraggedPlayer = useCallback(
     (teamKey: TeamKey, playerId: string, clientX: number, clientY: number) => {
@@ -981,6 +743,22 @@ export default function TacticsPage() {
         return;
       }
 
+      const isAssignmentModifierPressed = event.ctrlKey || event.metaKey;
+      if (
+        isAssignmentModifierPressed &&
+        game.settings.playersLocked &&
+        teamKey === "offense" &&
+        selectedPlayerRef?.teamKey === "defense"
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        setDefensePlayerTargets((current) => ({
+          ...current,
+          [selectedPlayerRef.playerId]: playerId,
+        }));
+        return;
+      }
+
       setSelectedPlayerRef({ teamKey, playerId });
 
       if (game.settings.playersLocked) {
@@ -1038,6 +816,16 @@ export default function TacticsPage() {
       event.stopPropagation();
 
       setDefenseAssignmentTargets((current) => {
+        if (!(playerId in current)) {
+          return current;
+        }
+
+        const next = { ...current };
+        delete next[playerId];
+        return next;
+      });
+
+      setDefensePlayerTargets((current) => {
         if (!(playerId in current)) {
           return current;
         }
@@ -1939,316 +1727,43 @@ export default function TacticsPage() {
     dragRouteBreakRef.current = null;
   };
 
-  const routeOverlays: RouteOverlay[] =
-    surfaceSize.width > 0 && surfaceSize.height > 0
-      ? game.offense.players
-          .filter(
-            (player) =>
-              player.isActive &&
-              player.isEligible &&
-              player.routeId !== null &&
-              !offenseCustomRouteTargets[player.id],
-          )
-          .map((player) => {
-            const relativeFieldYard = getRenderedRelativeFieldYard(
-              game.settings.lineOfScrimmageYard,
-              player.depthFromLos,
-            );
-            const lane = clamp(
-              player.lanePercent + formationShiftPercent,
-              4,
-              96,
-            );
-            const startX = (lane / 100) * surfaceSize.width;
-            const startY =
-              (toTopPercentFromPlayableYard(relativeFieldYard) / 100) *
-                surfaceSize.height -
-              10;
-            const points = getCommonRoutePoints(
-              player.routeId as RouteId,
-              startX,
-              startY,
-              surfaceSize.width,
-              surfaceSize.height,
-            ).map((point) => ({
-              x: clamp(point.x, 6, surfaceSize.width - 6),
-              y: clamp(point.y, 6, surfaceSize.height - 6),
-            }));
+  const routeOverlays: RouteOverlay[] = computeRouteOverlays(
+    game.offense.players,
+    offenseCustomRouteTargets,
+    game.settings.lineOfScrimmageYard,
+    formationShiftPercent,
+    surfaceSize,
+  );
 
-            const baseTip = points[points.length - 1];
-            let breakPoint: RoutePoint | null = null;
-            let tipAnchor = baseTip;
-
-            if (points.length >= 3) {
-              const stemStart = points[0];
-              const baseBreak = points[points.length - 2];
-              const stemDx = baseBreak.x - stemStart.x;
-              const stemDy = baseBreak.y - stemStart.y;
-              const stemLen = Math.hypot(stemDx, stemDy);
-              const breakExtensionPx =
-                (player.routeBreakExtension ?? 0) * surfaceSize.height;
-              breakPoint =
-                stemLen > 0.001
-                  ? {
-                      x: clamp(
-                        stemStart.x +
-                          (stemDx / stemLen) * (stemLen + breakExtensionPx),
-                        6,
-                        surfaceSize.width - 6,
-                      ),
-                      y: clamp(
-                        stemStart.y +
-                          (stemDy / stemLen) * (stemLen + breakExtensionPx),
-                        6,
-                        surfaceSize.height - 6,
-                      ),
-                    }
-                  : baseBreak;
-
-              const breakToTipDx = baseTip.x - baseBreak.x;
-              const breakToTipDy = baseTip.y - baseBreak.y;
-              tipAnchor = {
-                x: clamp(breakPoint.x + breakToTipDx, 6, surfaceSize.width - 6),
-                y: clamp(
-                  breakPoint.y + breakToTipDy,
-                  6,
-                  surfaceSize.height - 6,
-                ),
-              };
-            }
-
-            const segmentStart = breakPoint ?? points[0];
-            const tipDx = tipAnchor.x - segmentStart.x;
-            const tipDy = tipAnchor.y - segmentStart.y;
-            const tipSegmentLength = Math.hypot(tipDx, tipDy);
-            const tipExtensionPx =
-              (player.routeExtension ?? 0) * surfaceSize.height;
-            const tip =
-              tipSegmentLength > 0.001
-                ? {
-                    x: clamp(
-                      tipAnchor.x + (tipDx / tipSegmentLength) * tipExtensionPx,
-                      6,
-                      surfaceSize.width - 6,
-                    ),
-                    y: clamp(
-                      tipAnchor.y + (tipDy / tipSegmentLength) * tipExtensionPx,
-                      6,
-                      surfaceSize.height - 6,
-                    ),
-                  }
-                : tipAnchor;
-
-            const extendedPoints = breakPoint
-              ? [...points.slice(0, -2), breakPoint, tip]
-              : [...points.slice(0, -1), tip];
-
-            return {
-              id: player.id,
-              points: extendedPoints,
-              tip,
-              breakPoint,
-            };
-          })
-      : [];
+  const defensePlayerEllipseOverlays: DefensePlayerEllipseOverlay[] =
+    computeDefensePlayerEllipseOverlays(
+      game.defense.players,
+      game.offense.players,
+      defensePlayerTargets,
+      game.settings.lineOfScrimmageYard,
+      formationShiftPercent,
+      surfaceSize,
+    );
 
   const defenseAssignmentOverlays: DefenseAssignmentOverlay[] =
-    surfaceSize.width > 0 && surfaceSize.height > 0
-      ? game.defense.players
-          .filter((player) => player.isActive)
-          .map((player) => {
-            const target = defenseAssignmentTargets[player.id];
-            if (!target) {
-              return null;
-            }
-
-            if (target.coverageId !== game.settings.defenseCoverage) {
-              return null;
-            }
-
-            const zone = renderedDefenseCoverageZones[target.zoneIndex];
-            if (!zone) {
-              return null;
-            }
-
-            const relativeFieldYard = getRenderedRelativeFieldYard(
-              game.settings.lineOfScrimmageYard,
-              player.depthFromLos,
-            );
-            const lane = clamp(
-              player.lanePercent + formationShiftPercent,
-              4,
-              96,
-            );
-
-            return {
-              playerId: player.id,
-              startX: (lane / 100) * surfaceSize.width,
-              startY:
-                (toTopPercentFromPlayableYard(relativeFieldYard) / 100) *
-                surfaceSize.height,
-              endX:
-                ((zone.leftPercent + zone.widthPercent / 2) / 100) *
-                surfaceSize.width,
-              endY: ((zone.top + zone.height / 2) / 100) * surfaceSize.height,
-            };
-          })
-          .filter(
-            (overlay): overlay is DefenseAssignmentOverlay => overlay !== null,
-          )
-      : [];
+    computeDefenseAssignmentOverlays(
+      game.defense.players,
+      defenseAssignmentTargets,
+      renderedDefenseCoverageZones,
+      game.settings.defenseCoverage,
+      game.settings.lineOfScrimmageYard,
+      formationShiftPercent,
+      surfaceSize,
+    );
 
   const offenseCustomRouteOverlays: OffenseCustomRouteOverlay[] =
-    surfaceSize.width > 0 && surfaceSize.height > 0
-      ? game.offense.players
-          .filter((player) => player.isActive)
-          .map((player) => {
-            const target = offenseCustomRouteTargets[player.id];
-            if (!target) {
-              return null;
-            }
-
-            const relativeFieldYard = getRenderedRelativeFieldYard(
-              game.settings.lineOfScrimmageYard,
-              player.depthFromLos,
-            );
-            const lanePercent = clamp(
-              player.lanePercent + formationShiftPercent,
-              4,
-              96,
-            );
-            const topPercent = toTopPercentFromPlayableYard(relativeFieldYard);
-            let deltaXPercent = target.deltaXPercent;
-            let deltaYPercent = target.deltaYPercent;
-
-            if (!player.isEligible) {
-              const deltaXPx = (deltaXPercent / 100) * surfaceSize.width;
-              const deltaYPx = (deltaYPercent / 100) * surfaceSize.height;
-              const distancePx = Math.hypot(deltaXPx, deltaYPx);
-              const maxBlockYards =
-                deltaYPx > 0
-                  ? MAX_PULL_BLOCK_YARDS
-                  : MAX_INELIGIBLE_BLOCK_YARDS;
-              const maxDistancePx =
-                (maxBlockYards / TOTAL_FIELD_YARDS) * surfaceSize.height;
-
-              if (distancePx > maxDistancePx && distancePx > 0.001) {
-                const ratio = maxDistancePx / distancePx;
-                deltaXPercent *= ratio;
-                deltaYPercent *= ratio;
-              }
-            }
-
-            const endXPercent = clamp(lanePercent + deltaXPercent, 0, 100);
-            const endYPercent = clamp(topPercent + deltaYPercent, 0, 100);
-            const startX = (lanePercent / 100) * surfaceSize.width;
-            const startY = (topPercent / 100) * surfaceSize.height;
-            const draggedEndX = (endXPercent / 100) * surfaceSize.width;
-            const draggedEndY = (endYPercent / 100) * surfaceSize.height;
-            let endX = draggedEndX;
-            let endY = draggedEndY;
-            let isPullBlock = false;
-            let pathData: string | null = null;
-            let capStartX: number | null = null;
-            let capStartY: number | null = null;
-            let capEndX: number | null = null;
-            let capEndY: number | null = null;
-
-            if (!player.isEligible) {
-              const maxBlockYards =
-                draggedEndY > startY
-                  ? MAX_PULL_BLOCK_YARDS
-                  : MAX_INELIGIBLE_BLOCK_YARDS;
-              const maxDistancePx =
-                (maxBlockYards / TOTAL_FIELD_YARDS) * surfaceSize.height;
-              const draggedDx = draggedEndX - startX;
-              const draggedDy = draggedEndY - startY;
-              const backwardDepthPx = Math.max(0, draggedDy);
-
-              if (backwardDepthPx > 2) {
-                isPullBlock = true;
-
-                const forwardReturnY = clamp(
-                  -Math.max(
-                    10,
-                    Math.min(maxDistancePx * 0.3, backwardDepthPx * 0.45),
-                  ),
-                  -maxDistancePx,
-                  0,
-                );
-                const desiredFinalDx = draggedDx * 0.85;
-                const desiredFinalDy = forwardReturnY;
-                const desiredFinalDistance = Math.hypot(
-                  desiredFinalDx,
-                  desiredFinalDy,
-                );
-                const finalScale =
-                  desiredFinalDistance > maxDistancePx &&
-                  desiredFinalDistance > 0.001
-                    ? maxDistancePx / desiredFinalDistance
-                    : 1;
-
-                endX = startX + desiredFinalDx * finalScale;
-                endY = startY + desiredFinalDy * finalScale;
-
-                const control1X = startX + draggedDx * 0.2;
-                const control1Y = startY + backwardDepthPx * 0.95;
-                const control2X = startX + draggedDx * 0.95;
-                const control2Y = startY + backwardDepthPx * 0.9;
-                pathData = `M ${startX} ${startY} C ${control1X} ${control1Y}, ${control2X} ${control2Y}, ${endX} ${endY}`;
-
-                const tangentX = endX - control2X;
-                const tangentY = endY - control2Y;
-                const tangentLength = Math.hypot(tangentX, tangentY);
-
-                if (tangentLength > 0.001) {
-                  const perpendicularX = -tangentY / tangentLength;
-                  const perpendicularY = tangentX / tangentLength;
-                  capStartX = endX - perpendicularX * INELIGIBLE_BLOCK_T_CAP_PX;
-                  capStartY = endY - perpendicularY * INELIGIBLE_BLOCK_T_CAP_PX;
-                  capEndX = endX + perpendicularX * INELIGIBLE_BLOCK_T_CAP_PX;
-                  capEndY = endY + perpendicularY * INELIGIBLE_BLOCK_T_CAP_PX;
-                }
-              }
-
-              const dx = endX - startX;
-              const dy = endY - startY;
-              const distance = Math.hypot(dx, dy);
-
-              if (!isPullBlock && distance > 0.001) {
-                const perpendicularX = -dy / distance;
-                const perpendicularY = dx / distance;
-                capStartX = endX - perpendicularX * INELIGIBLE_BLOCK_T_CAP_PX;
-                capStartY = endY - perpendicularY * INELIGIBLE_BLOCK_T_CAP_PX;
-                capEndX = endX + perpendicularX * INELIGIBLE_BLOCK_T_CAP_PX;
-                capEndY = endY + perpendicularY * INELIGIBLE_BLOCK_T_CAP_PX;
-              } else if (!isPullBlock) {
-                capStartX = endX;
-                capStartY = endY - INELIGIBLE_BLOCK_T_CAP_PX;
-                capEndX = endX;
-                capEndY = endY + INELIGIBLE_BLOCK_T_CAP_PX;
-              }
-            }
-
-            return {
-              playerId: player.id,
-              startX,
-              startY,
-              endX,
-              endY,
-              isEligible: player.isEligible,
-              isPullBlock,
-              pathData,
-              capStartX,
-              capStartY,
-              capEndX,
-              capEndY,
-            };
-          })
-          .filter(
-            (overlay): overlay is OffenseCustomRouteOverlay => overlay !== null,
-          )
-      : [];
+    computeOffenseCustomRouteOverlays(
+      game.offense.players,
+      offenseCustomRouteTargets,
+      game.settings.lineOfScrimmageYard,
+      formationShiftPercent,
+      surfaceSize,
+    );
 
   const renderTeamPlayers = (team: Team, teamKey: TeamKey) =>
     team.players
@@ -2599,6 +2114,22 @@ export default function TacticsPage() {
                         <path d="M 0 0 L 10 5 L 0 10 z" fill="#b67bff" />
                       </marker>
                     </defs>
+
+                    {defensePlayerEllipseOverlays.map((ellipse) => (
+                      <ellipse
+                        key={`defense-player-ellipse-${ellipse.defensePlayerId}`}
+                        cx={ellipse.cx}
+                        cy={ellipse.cy}
+                        rx={ellipse.rx}
+                        ry={ellipse.ry}
+                        transform={`rotate(${ellipse.rotation}, ${ellipse.cx}, ${ellipse.cy})`}
+                        fill="none"
+                        stroke="#ff9900"
+                        strokeWidth={2}
+                        strokeDasharray="6 3"
+                        opacity={0.8}
+                      />
+                    ))}
 
                     {defenseAssignmentOverlays.map((assignment) => (
                       <line
